@@ -36,6 +36,9 @@ properties:
     description: "Name of the agent's datacenter."
     default: dc1
 
+  consul.agent.zone:
+    description: "Site (datacenter name), used for node name uniqness"
+
   consul.agent.services:
     description: "Map of consul service definitions."
     default: {}

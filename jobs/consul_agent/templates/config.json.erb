@@ -42,7 +42,7 @@
     "domain" => "cf.internal",
     "data_dir" => "/var/vcap/store/consul_agent",
     "log_level" => p("consul.agent.log_level"),
-    "node_name" => "#{name.gsub('_', '-')}-#{spec.index}",
+    "node_name" => "#{name.gsub('_', '-')}-#{p("consul.agent.zone")}-#{spec.index}",
     "server" => server,
     "ports" => {
       "dns" => 53,
