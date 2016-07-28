@@ -1,225 +1,124 @@
-#!/bin/bash -e
-# vim: set ft=sh
-
-<%
-  require 'openssl'
-  require 'base64'
-  def string_to_encrypt_key(string)
-    return string if is_already_key?(string)
-    Base64.encode64(OpenSSL::PKCS5.pbkdf2_hmac_sha1(string, "", 20000, 16)).strip
-  end
-
-  def is_already_key?(string)
-    return false unless string.length == 24
-    Base64.strict_decode64(string).length == 16
-  rescue
-    false
-  end
-%>
+#!/bin/bash -exu
 
 LOG_DIR=/var/vcap/sys/log/consul_agent
 RUN_DIR=/var/vcap/sys/run/consul_agent
 DATA_DIR=/var/vcap/store/consul_agent
 CONF_DIR=/var/vcap/jobs/consul_agent/config
 CERT_DIR=$CONF_DIR/certs
-
 PKG=/var/vcap/packages/consul
+JOB_DIR=/var/vcap/jobs/consul_agent
+PIDFILE=$RUN_DIR/consul_agent.pid
 
-PID_FILE=$RUN_DIR/consul_agent.pid
-NODE_NAME='<%="#{name.gsub('_', '-')}-#{spec.index}"%>'
+function main() {
+  local confab_package
+  confab_package=/var/vcap/packages/confab
 
-source /var/vcap/packages/consul-common/utils.sh
+  source /var/vcap/packages/consul-common/utils.sh
 
-mkdir -p /var/vcap/sys/log/monit
-exec 1>> /var/vcap/sys/log/monit/consul_agent.out.log
-exec 2>> /var/vcap/sys/log/monit/consul_agent.err.log
+  mkdir -p /var/vcap/sys/log/monit
+  exec 1>> /var/vcap/sys/log/monit/consul_agent.out.log
+  exec 2>> /var/vcap/sys/log/monit/consul_agent.err.log
 
-stop_consul() {
-  echo "$(date) Consul failed to start"
-  local consul_pid=$1
-  if ! $PKG/bin/consul leave; then
-    kill ${consul_pid} || true
-  fi
+  case $1 in
+    start)
+      start "${confab_package}"
+      ;;
 
-  wait ${consul_pid}
+    stop)
+      stop "${confab_package}"
+      ;;
+
+    *)
+      echo "Usage: $0 {start|stop}"
+      ;;
+  esac
 }
 
-case $1 in
-  start)
+function setup_resolvconf() {
+  local resolvconf_file
+  resolvconf_file=/etc/resolvconf/resolv.conf.d/head
 
-    pid_guard ${PIDFILE} "consul_agent"
+  if ! grep -qE '127.0.0.1\b' "${resolvconf_file}"; then
+	  if [[ "$(stat -c "%s" "${resolvconf_file}")" = "0" ]]; then
+		  echo 'nameserver 127.0.0.1' > "${resolvconf_file}"
+	  else
+		  sed -i -e '1i nameserver 127.0.0.1' "${resolvconf_file}"
+	  fi
+  fi
 
-    mkdir -p $LOG_DIR
-    chown -R vcap:vcap $LOG_DIR
+  resolvconf -u
+}
 
-    mkdir -p $RUN_DIR
-    chown -R vcap:vcap $RUN_DIR
+function start() {
+  local confab_package
+  confab_package="${1}"
 
-    mkdir -p $DATA_DIR
-    chown -R vcap:vcap $DATA_DIR
+  pid_guard "${PIDFILE}" "consul_agent"
 
-    <% if p("consul.require_ssl") %>
-      chown vcap:vcap ${CERT_DIR}/*.{crt,key}
-      chmod 640 ${CERT_DIR}/*.{crt,key}
-    <% end %>
+  mkdir -p "${LOG_DIR}"
+  chown -R vcap:vcap "${LOG_DIR}"
 
-    <% p("consul.agent.services").each do |service_name, service| %>
-    cat > $CONF_DIR/service-<%= service_name %>.json <<EOF
-<%=
-{
-  "service" => {
-    "name" => service_name.tr('_', '-'),
-    "check" => {
-      "script" => "/var/vcap/jobs/#{service_name}/bin/dns_health_check",
-      "interval" => "3s"
-    },
-    "tags" => ["#{name.gsub('_', '-')}-#{spec.index}"]
-  }.merge(service)
-}.to_json
-%>
-EOF
-    <% end %>
+  mkdir -p "${RUN_DIR}"
+  chown -R vcap:vcap "${RUN_DIR}"
 
-    # "Consul uses a significant amount of virtual memory, since LMDB uses
-    # mmap() underneath. It uses about 700MB of a 32bit system and 40GB on a
-    # 64bit system."
-    #
-    # this mainly applies to bosh-lite
-    ulimit -v unlimited
+  mkdir -p "${DATA_DIR}"
+  chown -R vcap:vcap "${DATA_DIR}"
 
-    # add consul agent's dns to resolv.conf
-    #
-    # /etc/resolv.conf will probably be regenerated all the time, so add the
-    # local dns server to /head, which will be prepended when regenerated.
-    echo 'nameserver 127.0.0.1' > /etc/resolvconf/resolv.conf.d/head
+  mkdir -p "${CONF_DIR}"
+  chown -R vcap:vcap "${CONF_DIR}"
 
-    if resolvconf --updates-are-enabled; then
-      resolvconf -u
-    else
-      # updates are disabled in bosh-lite; in this case just add to
-      # /etc/resolv.conf directly.
-      #
-      # enabling updates and then updating it with resolvconf -u seems to add
-      # dns entries from where the box was generated.
-      if ! grep -q 127.0.0.1 /etc/resolv.conf; then
-        sed -i -e '1i nameserver 127.0.0.1' /etc/resolv.conf
-      fi
-    fi
+  chown vcap:vcap ${CERT_DIR}/*.{crt,key}
+  chmod 640 ${CERT_DIR}/*.{crt,key}
 
-    expected=<%=p("consul.agent.servers.lan").size%>
-    consul_join="<%=p("consul.agent.servers.lan").join(' ')%>"
-    server=<%=p("consul.agent.mode") == "server"%>
+  # "Consul uses a significant amount of virtual memory, since LMDB uses
+  # mmap() underneath. It uses about 700MB of a 32bit system and 40GB on a
+  # 64bit system."
+  #
+  # this mainly applies to bosh-lite
+  ulimit -v unlimited
+  ulimit -n 4096
 
-    setcap cap_net_bind_service=+ep $PKG/bin/consul
+  setup_resolvconf
 
-    GOMAXPROCS=$(nproc)
-    if [ "$GOMAXPROCS" = "1" ]; then
-      GOMAXPROCS=2
-    fi
+  local server
+  server=<%=p("consul.agent.mode") == "server"%>
 
-    export GOMAXPROCS
+  setcap cap_net_bind_service=+ep $PKG/bin/consul
 
-    if [ "$server" != "true" ]; then
-      rm -f $DATA_DIR/serf/local.keyring
-    fi
+  GOMAXPROCS=$(nproc)
+  if [ "$GOMAXPROCS" = "1" ]; then
+    GOMAXPROCS=2
+  fi
 
-    chpst -u vcap:vcap $PKG/bin/consul agent \
-      -config-dir=$CONF_DIR \
-      2> >(tee -a ${LOG_DIR}/consul_agent.stderr.log | logger -p user.error -t vcap.consul-agent) \
-      1> >(tee -a ${LOG_DIR}/consul_agent.stdout.log | logger -p user.info  -t vcap.consul-agent) &
+  export GOMAXPROCS
 
-    consul_pid=$!
+  local nameservers
+  nameservers=("$(cat /etc/resolv.conf | grep nameserver | awk '{print $2}' | grep -Ev '127.0.0.1\b')")
 
-    trap "stop_consul $consul_pid" ERR
+  local recursors
+  recursors=""
 
-    echo "Consul pid is " + $consul_pid
+  for nameserver in ${nameservers[@]}; do
+    recursors="${recursors} -recursor=${nameserver}"
+  done
 
-    start=0
-    synced=true
-    if [ $expected -gt 0 ]; then
-      synced=false
-      consul_server_ips="<%=p("consul.agent.servers.lan").join('\\|')%>"
-      for i in $(seq <%= p("consul.agent.sync_timeout_in_seconds") %>); do
-        echo "$(date)" "Waiting to have joined one of: ${consul_join}"
-        if $PKG/bin/consul members -status=alive | grep "${consul_server_ips}"; then
-          synced=true
-          break
-        fi
+  chpst -u vcap:vcap "${confab_package}/bin/confab" \
+    start \
+    ${recursors} \
+    --config-file ${JOB_DIR}/confab.json \
+    2> >(tee -a ${LOG_DIR}/consul_agent.stderr.log | logger -p user.error -t vcap.consul-agent) \
+    1> >(tee -a ${LOG_DIR}/consul_agent.stdout.log | logger -p user.info  -t vcap.consul-agent)
+}
 
-        sleep 1
-        start=$((start + 1))
-      done
-    fi
+function stop() {
+  local confab_package
+  confab_package="${1}"
 
-    if [ "$server" == "true" ]; then
-      actual=$($PKG/bin/consul members -status=alive | grep server | wc -l)
+  "${confab_package}/bin/confab" \
+    stop \
+    --config-file ${JOB_DIR}/confab.json \
+    2> >(tee -a ${LOG_DIR}/consul_agent.stderr.log | logger -p user.error -t vcap.consul-agent) \
+    1> >(tee -a ${LOG_DIR}/consul_agent.stdout.log | logger -p user.info  -t vcap.consul-agent)
+}
 
-      # only the last member of the cluster waits for leader election
-      if [[ $actual -eq $expected ]]; then
-        synced=false
-        for i in $(seq $start <%= p("consul.agent.sync_timeout_in_seconds") %>); do
-          info=$($PKG/bin/consul info)
-          commit_index=$(echo $info | grep -o "commit_index = [0-9]\+" | cut -d "=" -f2 | tr -d " ")
-          last_log_index=$(echo $info | grep -o "last_log_index = [0-9]\+" | cut -d "=" -f2 | tr -d " ")
-          echo "commit_index: $commit_index"
-          echo "last_log_index: $last_log_index"
-          if [[ $commit_index -ne 0 && $last_log_index -eq $commit_index ]]; then
-            synced=true
-            break
-          fi
-          sleep 1
-        done
-
-        leader=$(curl -s http://127.0.0.1:8500/v1/status/leader)
-
-        if [ "$leader" == '""' ]; then
-          echo "$(date) No leader found"
-          synced=false
-        fi
-      fi
-    fi
-
-    if ${synced}; then
-      echo "$(date) Consul is synced"
-
-      <% if p("consul.require_ssl") %>
-        <% if !p("consul.encrypt_keys").nil? && !p("consul.encrypt_keys").empty? %>
-          if [ "$server" == "true" ]; then
-            allkeys=$($PKG/bin/consul keyring -list | grep -oP '[^\s]{24}' | sort -u | awk '{ print $1 }')
-            extrakeys=$(echo $allkeys | xargs -n1 | grep -v '<%= p("consul.encrypt_keys").collect{|key| string_to_encrypt_key(key) }.join('\\|') %>' | cat)
-            <% p("consul.encrypt_keys").each do |encrypt_key| %>
-              $PKG/bin/consul keyring -install='<%= string_to_encrypt_key(encrypt_key) %>'
-            <% end %>
-            $PKG/bin/consul keyring -use='<%= string_to_encrypt_key(p("consul.encrypt_keys").first) %>'
-            for toremove in $extrakeys ; do
-              $PKG/bin/consul keyring -remove="$toremove"
-            done
-          fi
-        <% end %>
-      <% end %>
-    else
-      echo "$(date) Consul failed to sync"
-      stop_consul $consul_pid
-
-      if [ "$server" == "true" ];  then
-        if [[ $expected -gt 1 ]]; then
-          echo "Decided to delete data directory since not the only cluster member"
-          rm -rf ${DATA_DIR}/*
-        fi
-      fi
-      exit 1
-    fi
-
-    echo ${consul_pid} > $PID_FILE
-
-    ;;
-
-  stop)
-    consul_pid=`head -1 $PID_FILE`
-    stop_consul $consul_pid
-    ;;
-
-  *)
-    echo "Usage: $0 {start|stop}"
-    ;;
-esac
+main $@

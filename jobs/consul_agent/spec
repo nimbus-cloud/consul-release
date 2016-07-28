@@ -3,8 +3,8 @@ name: consul_agent
 
 templates:
   agent_ctl.sh.erb: bin/agent_ctl
+  confab.json.erb: confab.json
   join_ctl.sh.erb: bin/join_ctl
-  config.json.erb: config/config.json
   ca.crt.erb: config/certs/ca.crt
   server.crt.erb: config/certs/server.crt
   server.key.erb: config/certs/server.key
@@ -14,6 +14,7 @@ templates:
 packages:
   - consul-common
   - consul
+  - confab
 
 properties:
   consul.agent.mode:
@@ -47,22 +48,23 @@ properties:
     description: "The Consul protocol to use."
     default: 2
 
-  consul.agent.sync_timeout_in_seconds:
-    description: "Time to wait for a consul node to finish syncing with the cluster in seconds"
-    default: 60
+  consul.agent.domain:
+    description: "Domain suffix for DNS"
 
-  consul.require_ssl:
-    description: "enable ssl for all communication with consul"
-    default: true
   consul.ca_cert:
     description: "PEM-encoded CA certificate"
+
   consul.server_cert:
     description: "PEM-encoded server certificate"
+
   consul.server_key:
     description: "PEM-encoded server key"
+
   consul.agent_cert:
     description: "PEM-encoded agent certificate"
+
   consul.agent_key:
     description: "PEM-encoded client key"
+
   consul.encrypt_keys:
     description: "A list of passphrases that will be converted into encryption keys, the first key in the list is the active one"
