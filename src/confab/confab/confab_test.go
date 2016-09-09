@@ -19,6 +19,7 @@ const COMMAND_TIMEOUT = "15s"
 var _ = Describe("confab", func() {
 	var (
 		tempDir         string
+		dataDir         string
 		consulConfigDir string
 		pidFile         *os.File
 		configFile      *os.File
@@ -27,6 +28,9 @@ var _ = Describe("confab", func() {
 	BeforeEach(func() {
 		var err error
 		tempDir, err = ioutil.TempDir("", "testing")
+		Expect(err).NotTo(HaveOccurred())
+
+		dataDir, err = ioutil.TempDir("", "dataDir")
 		Expect(err).NotTo(HaveOccurred())
 
 		consulConfigDir, err = ioutil.TempDir(tempDir, "fake-agent-config-dir")
@@ -74,6 +78,7 @@ var _ = Describe("confab", func() {
 					"agent_path":        pathToFakeAgent,
 					"consul_config_dir": consulConfigDir,
 					"pid_file":          pidFile.Name(),
+					"data_dir":          dataDir,
 				},
 				"consul": map[string]interface{}{
 					"encrypt_keys": []string{"banana"},
@@ -83,6 +88,7 @@ var _ = Describe("confab", func() {
 						"log_level":  "debug",
 						"servers": map[string]interface{}{
 							"lan": []string{"member-1", "member-2", "member-3"},
+							"wan": []string{"wan-member-1", "wan-member-2", "wan-member-3"},
 						},
 						"services": map[string]interface{}{
 							"cloud_controller": map[string]interface{}{
@@ -175,11 +181,11 @@ var _ = Describe("confab", func() {
 
 			consulConfig, err := ioutil.ReadFile(filepath.Join(consulConfigDir, "config.json"))
 			Expect(err).NotTo(HaveOccurred())
-			Expect(string(consulConfig)).To(MatchJSON(`{
+			Expect(string(consulConfig)).To(MatchJSON(fmt.Sprintf(`{
 				"server": false,
 				"domain": "some-domain",
 				"datacenter": "dc1",
-				"data_dir": "/var/vcap/store/consul_agent",
+				"data_dir": %q,
 				"log_level": "debug",
 				"node_name": "my-node-3",
 				"ports": {
@@ -191,6 +197,11 @@ var _ = Describe("confab", func() {
 					"member-2",
 					"member-3"
 				],
+				"retry_join_wan": [
+					"wan-member-1",
+					"wan-member-2",
+					"wan-member-3"
+				],
 				"bind_addr": "10.0.0.1",
 				"disable_remote_exec": true,
 				"disable_update_check": true,
@@ -198,11 +209,15 @@ var _ = Describe("confab", func() {
 				"verify_outgoing": true,
 				"verify_incoming": true,
 				"verify_server_hostname": true,
-				"ca_file": "/var/vcap/jobs/consul_agent/config/certs/ca.crt",
-				"key_file": "/var/vcap/jobs/consul_agent/config/certs/agent.key",
-				"cert_file": "/var/vcap/jobs/consul_agent/config/certs/agent.crt",
-				"encrypt": "enqzXBmgKOy13WIGsmUk+g=="
-			}`))
+				"ca_file": "%[2]s/certs/ca.crt",
+				"key_file": "%[2]s/certs/agent.key",
+				"cert_file": "%[2]s/certs/agent.crt",
+				"encrypt": "enqzXBmgKOy13WIGsmUk+g==",
+				"dns_config": {
+					"allow_stale": false,
+					"max_stale": "5s"
+				}
+			}`, dataDir, consulConfigDir)))
 		})
 	})
 
@@ -213,6 +228,7 @@ var _ = Describe("confab", func() {
 					"agent_path":        pathToFakeAgent,
 					"consul_config_dir": consulConfigDir,
 					"pid_file":          pidFile.Name(),
+					"data_dir":          dataDir,
 				},
 				"consul": map[string]interface{}{
 					"agent": map[string]interface{}{
@@ -262,6 +278,7 @@ var _ = Describe("confab", func() {
 						"agent_path":        pathToFakeAgent,
 						"consul_config_dir": consulConfigDir,
 						"pid_file":          pidFile.Name(),
+						"data_dir":          dataDir,
 					},
 					"consul": map[string]interface{}{
 						"agent": map[string]interface{}{
@@ -310,6 +327,7 @@ var _ = Describe("confab", func() {
 						"agent_path":        pathToFakeAgent,
 						"consul_config_dir": consulConfigDir,
 						"pid_file":          pidFile.Name(),
+						"data_dir":          dataDir,
 					},
 					"consul": map[string]interface{}{
 						"agent": map[string]interface{}{
@@ -355,6 +373,7 @@ var _ = Describe("confab", func() {
 					"agent_path":        pathToFakeAgent,
 					"consul_config_dir": consulConfigDir,
 					"pid_file":          pidFile.Name(),
+					"data_dir":          dataDir,
 				},
 				"consul": map[string]interface{}{
 					"agent": map[string]interface{}{
@@ -416,6 +435,7 @@ var _ = Describe("confab", func() {
 					"agent_path":        pathToFakeAgent,
 					"consul_config_dir": consulConfigDir,
 					"pid_file":          pidFile.Name(),
+					"data_dir":          dataDir,
 				},
 			})
 		})
@@ -485,6 +505,7 @@ var _ = Describe("confab", func() {
 						"agent_path":        "/tmp/path/that/does/not/exist",
 						"consul_config_dir": consulConfigDir,
 						"pid_file":          pidFile.Name(),
+						"data_dir":          dataDir,
 					},
 					"consul": map[string]interface{}{
 						"agent": map[string]interface{}{
@@ -514,6 +535,7 @@ var _ = Describe("confab", func() {
 						"agent_path":        pathToFakeAgent,
 						"consul_config_dir": consulConfigDir,
 						"pid_file":          "",
+						"data_dir":          dataDir,
 					},
 					"consul": map[string]interface{}{
 						"agent": map[string]interface{}{
@@ -543,6 +565,7 @@ var _ = Describe("confab", func() {
 						"agent_path":        pathToFakeAgent,
 						"consul_config_dir": "/tmp/path/that/does/not/exist",
 						"pid_file":          pidFile.Name(),
+						"data_dir":          dataDir,
 					},
 					"consul": map[string]interface{}{
 						"agent": map[string]interface{}{
@@ -572,6 +595,7 @@ var _ = Describe("confab", func() {
 						"agent_path":        pathToFakeAgent,
 						"consul_config_dir": consulConfigDir,
 						"pid_file":          pidFile.Name(),
+						"data_dir":          dataDir,
 					},
 					"consul": map[string]interface{}{
 						"agent": map[string]interface{}{
@@ -583,7 +607,7 @@ var _ = Describe("confab", func() {
 				})
 			})
 
-			It("prints an error and exits status 1", func() {
+			It("prints an error and exits status 1 without killing the process", func() {
 				cmd := exec.Command(pathToConfab,
 					"start",
 					"--config-file", configFile.Name(),
@@ -601,9 +625,11 @@ var _ = Describe("confab", func() {
 				cmd.Stderr = stderr
 
 				Eventually(cmd.Run, COMMAND_TIMEOUT, COMMAND_TIMEOUT).ShouldNot(Succeed())
-				Expect(stderr).To(ContainSubstring("error during start"))
-				Expect(stderr).To(ContainSubstring("already running"))
-				Expect(stdout).To(ContainSubstring("controller.stop-agent.success"))
+				Expect(stderr).To(ContainSubstring("consul_agent is already running, please stop it first"))
+
+				pid, err := getPID(pidFile.Name())
+				Expect(err).NotTo(HaveOccurred())
+				Expect(isPIDRunning(pid)).To(BeTrue())
 			})
 		})
 
@@ -614,6 +640,7 @@ var _ = Describe("confab", func() {
 						"agent_path":        pathToFakeAgent,
 						"consul_config_dir": consulConfigDir,
 						"pid_file":          pidFile.Name(),
+						"data_dir":          dataDir,
 					},
 					"consul": map[string]interface{}{
 						"agent": map[string]interface{}{
@@ -698,6 +725,7 @@ var _ = Describe("confab", func() {
 						"agent_path":        pathToFakeAgent,
 						"consul_config_dir": consulConfigDir,
 						"pid_file":          pidFile.Name(),
+						"data_dir":          dataDir,
 					},
 					"consul": map[string]interface{}{
 						"agent": map[string]interface{}{

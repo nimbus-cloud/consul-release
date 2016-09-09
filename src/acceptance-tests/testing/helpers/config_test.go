@@ -40,7 +40,10 @@ var _ = Describe("configuration", func() {
 						"director_ca_cert": "some-ca-cert"
 					},
 					"aws": {
-						"subnet": "some-awssubnet",
+						"subnets": [
+						{"id":"some-awssubnet-1", "range": "10.0.1.0/24", "az":"some-az-1"},
+						{"id":"some-awssubnet-2", "range": "10.0.2.0/24", "az":"some-az-2"}
+						],
 						"access_key_id": "some-access-key-id",
 						"secret_access_key": "some-secret-access-key",
 						"default_key_name": "some-default-key-name",
@@ -52,7 +55,8 @@ var _ = Describe("configuration", func() {
 						"port": 12345,
 						"username": "some-registry-username",
 						"password": "some-registry-password"
-					}
+					},
+					"parallel_nodes": 4
 				}`)
 				Expect(err).NotTo(HaveOccurred())
 			})
@@ -73,7 +77,10 @@ var _ = Describe("configuration", func() {
 						DirectorCACert: "some-ca-cert",
 					},
 					AWS: helpers.ConfigAWS{
-						Subnet:                "some-awssubnet",
+						Subnets: []helpers.ConfigSubnet{
+							{ID: "some-awssubnet-1", Range: "10.0.1.0/24", AZ: "some-az-1"},
+							{ID: "some-awssubnet-2", Range: "10.0.2.0/24", AZ: "some-az-2"},
+						},
 						AccessKeyID:           "some-access-key-id",
 						SecretAccessKey:       "some-secret-access-key",
 						DefaultKeyName:        "some-default-key-name",
@@ -87,6 +94,7 @@ var _ = Describe("configuration", func() {
 						Password: "some-registry-password",
 					},
 					TurbulenceReleaseName: "turbulence",
+					ParallelNodes:         4,
 				}))
 			})
 		})
@@ -221,6 +229,7 @@ var _ = Describe("configuration", func() {
 						Region:         "us-east-1",
 					},
 					TurbulenceReleaseName: "turbulence",
+					ParallelNodes:         1,
 				}))
 			})
 		})
@@ -259,6 +268,7 @@ var _ = Describe("configuration", func() {
 						Region:         "us-east-1",
 					},
 					TurbulenceReleaseName: "turbulence",
+					ParallelNodes:         1,
 				}))
 			})
 		})
@@ -297,8 +307,72 @@ var _ = Describe("configuration", func() {
 						Region:         "us-east-1",
 					},
 					TurbulenceReleaseName: "turbulence",
+					ParallelNodes:         1,
 				}))
 			})
+		})
+
+		Context("when parallel_nodes is missing", func() {
+			var configFilePath string
+
+			BeforeEach(func() {
+				var err error
+				configFilePath, err = writeConfigJSON(`{
+					"bosh": {
+						"target": "some-bosh-target",
+						"username": "some-bosh-username",
+						"password": "some-bosh-password"
+					}
+				}`)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			AfterEach(func() {
+				err := os.Remove(configFilePath)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("uses parallel_nodes: 1", func() {
+				config, err := helpers.LoadConfig(configFilePath)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(config).To(Equal(helpers.Config{
+					BOSH: helpers.ConfigBOSH{
+						Target:   "some-bosh-target",
+						Username: "some-bosh-username",
+						Password: "some-bosh-password",
+					},
+					AWS: helpers.ConfigAWS{
+						DefaultKeyName: "bosh",
+						Region:         "us-east-1",
+					},
+					TurbulenceReleaseName: "turbulence",
+					ParallelNodes:         1,
+				}))
+			})
+		})
+	})
+
+	Describe("ConsulReleaseVersion", func() {
+		var releaseVersion string
+
+		BeforeEach(func() {
+			releaseVersion = os.Getenv("CONSUL_RELEASE_VERSION")
+		})
+
+		AfterEach(func() {
+			os.Setenv("CONSUL_RELEASE_VERSION", releaseVersion)
+		})
+
+		It("retrieves the consul release version number from the env", func() {
+			os.Setenv("CONSUL_RELEASE_VERSION", "some-release-number")
+			version := helpers.ConsulReleaseVersion()
+			Expect(version).To(Equal("some-release-number"))
+		})
+
+		It("returns 'latest' if the env is not set", func() {
+			os.Setenv("CONSUL_RELEASE_VERSION", "")
+			version := helpers.ConsulReleaseVersion()
+			Expect(version).To(Equal("latest"))
 		})
 	})
 

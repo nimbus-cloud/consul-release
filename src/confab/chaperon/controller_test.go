@@ -4,13 +4,14 @@ import (
 	"errors"
 	"time"
 
+	"code.cloudfoundry.org/lager"
+
 	"github.com/cloudfoundry-incubator/consul-release/src/confab"
 	"github.com/cloudfoundry-incubator/consul-release/src/confab/agent"
 	"github.com/cloudfoundry-incubator/consul-release/src/confab/chaperon"
 	"github.com/cloudfoundry-incubator/consul-release/src/confab/config"
 	"github.com/cloudfoundry-incubator/consul-release/src/confab/fakes"
 	consulagent "github.com/hashicorp/consul/command/agent"
-	"github.com/pivotal-golang/lager"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -40,7 +41,7 @@ var _ = Describe("Controller", func() {
 
 		serviceDefiner = &fakes.ServiceDefiner{}
 
-		confabConfig := config.Default()
+		confabConfig := config.Config{}
 		confabConfig.Node = config.ConfigNode{Name: "node", Index: 0}
 
 		controller = chaperon.Controller{
@@ -86,7 +87,7 @@ var _ = Describe("Controller", func() {
 			Expect(serviceDefiner.WriteDefinitionsCall.Receives.ConfigDir).To(Equal("/tmp/config"))
 			Expect(serviceDefiner.WriteDefinitionsCall.Receives.Definitions).To(Equal(definitions))
 
-			Expect(logger.Messages).To(ContainSequence([]fakes.LoggerMessage{
+			Expect(logger.Messages()).To(ContainSequence([]fakes.LoggerMessage{
 				{
 					Action: "controller.write-service-definitions.generate-definitions",
 				},
@@ -106,7 +107,7 @@ var _ = Describe("Controller", func() {
 				err := controller.WriteServiceDefinitions()
 				Expect(err).To(MatchError(errors.New("write definitions error")))
 
-				Expect(logger.Messages).To(ContainSequence([]fakes.LoggerMessage{
+				Expect(logger.Messages()).To(ContainSequence([]fakes.LoggerMessage{
 					{
 						Action: "controller.write-service-definitions.generate-definitions",
 					},
@@ -127,7 +128,7 @@ var _ = Describe("Controller", func() {
 			Expect(controller.BootAgent(confab.NewTimeout(make(chan time.Time)))).To(Succeed())
 			Expect(agentRunner.RunCalls.CallCount).To(Equal(1))
 			Expect(agentClient.VerifyJoinedCalls.CallCount).To(Equal(1))
-			Expect(logger.Messages).To(ContainSequence([]fakes.LoggerMessage{
+			Expect(logger.Messages()).To(ContainSequence([]fakes.LoggerMessage{
 				{
 					Action: "controller.boot-agent.run",
 				},
@@ -147,7 +148,7 @@ var _ = Describe("Controller", func() {
 				Expect(controller.BootAgent(confab.NewTimeout(make(chan time.Time)))).To(MatchError("some error"))
 				Expect(agentRunner.RunCalls.CallCount).To(Equal(1))
 				Expect(agentClient.VerifyJoinedCalls.CallCount).To(Equal(0))
-				Expect(logger.Messages).To(ContainSequence([]fakes.LoggerMessage{
+				Expect(logger.Messages()).To(ContainSequence([]fakes.LoggerMessage{
 					{
 						Action: "controller.boot-agent.run",
 					},
@@ -170,7 +171,7 @@ var _ = Describe("Controller", func() {
 				Expect(agentClient.VerifyJoinedCalls.CallCount).To(Equal(10))
 				Expect(clock.SleepCall.CallCount).To(Equal(9))
 				Expect(clock.SleepCall.Receives.Duration).To(Equal(10 * time.Millisecond))
-				Expect(logger.Messages).To(ContainSequence([]fakes.LoggerMessage{
+				Expect(logger.Messages()).To(ContainSequence([]fakes.LoggerMessage{
 					{
 						Action: "controller.boot-agent.run",
 					},
@@ -201,7 +202,7 @@ var _ = Describe("Controller", func() {
 				Expect(agentClient.VerifyJoinedCalls.CallCount).To(Equal(0))
 				Expect(agentClient.VerifySyncedCalls.CallCount).To(Equal(0))
 
-				Expect(logger.Messages).To(ContainSequence([]fakes.LoggerMessage{
+				Expect(logger.Messages()).To(ContainSequence([]fakes.LoggerMessage{
 					{
 						Action: "controller.boot-agent.run",
 					},
@@ -231,7 +232,7 @@ var _ = Describe("Controller", func() {
 			Expect(agentClient.SetConsulRPCClientCall.Receives.ConsulRPCClient).To(Equal(&agent.RPCClient{*rpcClient}))
 			Expect(agentRunner.WaitCall.CallCount).To(Equal(1))
 			Expect(agentRunner.CleanupCall.CallCount).To(Equal(1))
-			Expect(logger.Messages).To(ContainSequence([]fakes.LoggerMessage{
+			Expect(logger.Messages()).To(ContainSequence([]fakes.LoggerMessage{
 				{
 					Action: "controller.stop-agent.leave",
 				},
@@ -257,7 +258,7 @@ var _ = Describe("Controller", func() {
 				Expect(agentRunner.StopCall.CallCount).To(Equal(1))
 				Expect(agentRunner.WaitCall.CallCount).To(Equal(1))
 				Expect(agentRunner.CleanupCall.CallCount).To(Equal(1))
-				Expect(logger.Messages).To(ContainSequence([]fakes.LoggerMessage{
+				Expect(logger.Messages()).To(ContainSequence([]fakes.LoggerMessage{
 					{
 						Action: "controller.stop-agent.leave",
 					},
@@ -287,7 +288,7 @@ var _ = Describe("Controller", func() {
 
 				It("logs the error", func() {
 					controller.StopAgent(rpcClient)
-					Expect(logger.Messages).To(ContainSequence([]fakes.LoggerMessage{
+					Expect(logger.Messages()).To(ContainSequence([]fakes.LoggerMessage{
 						{
 							Action: "controller.stop-agent.leave",
 						},
@@ -323,7 +324,7 @@ var _ = Describe("Controller", func() {
 
 			It("logs the error", func() {
 				controller.StopAgent(rpcClient)
-				Expect(logger.Messages).To(ContainSequence([]fakes.LoggerMessage{
+				Expect(logger.Messages()).To(ContainSequence([]fakes.LoggerMessage{
 					{
 						Action: "controller.stop-agent.leave",
 					},
@@ -351,7 +352,7 @@ var _ = Describe("Controller", func() {
 
 			It("logs the error", func() {
 				controller.StopAgent(rpcClient)
-				Expect(logger.Messages).To(ContainSequence([]fakes.LoggerMessage{
+				Expect(logger.Messages()).To(ContainSequence([]fakes.LoggerMessage{
 					{
 						Action: "controller.stop-agent.leave",
 					},
@@ -392,7 +393,7 @@ var _ = Describe("Controller", func() {
 				Expect(agentClient.SetConsulRPCClientCall.CallCount).To(Equal(1))
 				Expect(agentClient.SetConsulRPCClientCall.Receives.ConsulRPCClient).To(Equal(&agent.RPCClient{*rpcClient}))
 				Expect(agentRunner.WritePIDCall.CallCount).To(Equal(1))
-				Expect(logger.Messages).To(ContainSequence([]fakes.LoggerMessage{
+				Expect(logger.Messages()).To(ContainSequence([]fakes.LoggerMessage{
 					{
 						Action: "controller.configure-server.is-last-node",
 					},
@@ -417,7 +418,7 @@ var _ = Describe("Controller", func() {
 					"key 2",
 					"key 3",
 				}))
-				Expect(logger.Messages).To(ContainSequence([]fakes.LoggerMessage{
+				Expect(logger.Messages()).To(ContainSequence([]fakes.LoggerMessage{
 					{
 						Action: "controller.configure-server.is-last-node",
 					},
@@ -444,7 +445,7 @@ var _ = Describe("Controller", func() {
 						"key 3",
 					}))
 					Expect(agentRunner.WritePIDCall.CallCount).To(Equal(0))
-					Expect(logger.Messages).To(ContainSequence([]fakes.LoggerMessage{
+					Expect(logger.Messages()).To(ContainSequence([]fakes.LoggerMessage{
 						{
 							Action: "controller.configure-server.is-last-node",
 						},
@@ -475,7 +476,7 @@ var _ = Describe("Controller", func() {
 					Expect(agentClient.SetKeysCall.Receives.Keys).To(BeNil())
 					Expect(agentRunner.WritePIDCall.CallCount).To(Equal(0))
 
-					Expect(logger.Messages).To(ContainSequence([]fakes.LoggerMessage{
+					Expect(logger.Messages()).To(ContainSequence([]fakes.LoggerMessage{
 						{
 							Action: "controller.configure-server.is-last-node",
 						},
@@ -498,7 +499,7 @@ var _ = Describe("Controller", func() {
 				Expect(agentClient.VerifySyncedCalls.CallCount).To(Equal(1))
 				Expect(agentRunner.WritePIDCall.CallCount).To(Equal(1))
 
-				Expect(logger.Messages).To(ContainSequence([]fakes.LoggerMessage{
+				Expect(logger.Messages()).To(ContainSequence([]fakes.LoggerMessage{
 					{
 						Action: "controller.configure-server.is-last-node",
 					},
@@ -530,7 +531,7 @@ var _ = Describe("Controller", func() {
 					Expect(clock.SleepCall.Receives.Duration).To(Equal(10 * time.Millisecond))
 					Expect(agentRunner.WritePIDCall.CallCount).To(Equal(1))
 
-					Expect(logger.Messages).To(ContainSequence([]fakes.LoggerMessage{
+					Expect(logger.Messages()).To(ContainSequence([]fakes.LoggerMessage{
 						{
 							Action: "controller.configure-server.is-last-node",
 						},
@@ -567,7 +568,7 @@ var _ = Describe("Controller", func() {
 					Expect(agentClient.SetKeysCall.Receives.Keys).To(BeNil())
 					Expect(agentRunner.WritePIDCall.CallCount).To(Equal(0))
 
-					Expect(logger.Messages).To(ContainSequence([]fakes.LoggerMessage{
+					Expect(logger.Messages()).To(ContainSequence([]fakes.LoggerMessage{
 						{
 							Action: "controller.configure-server.is-last-node",
 						},
@@ -590,7 +591,7 @@ var _ = Describe("Controller", func() {
 					Expect(agentClient.VerifySyncedCalls.CallCount).To(Equal(0))
 					Expect(agentClient.SetKeysCall.Receives.Keys).To(BeNil())
 					Expect(agentRunner.WritePIDCall.CallCount).To(Equal(0))
-					Expect(logger.Messages).To(ContainSequence([]fakes.LoggerMessage{
+					Expect(logger.Messages()).To(ContainSequence([]fakes.LoggerMessage{
 						{
 							Action: "controller.configure-server.is-last-node",
 						},
@@ -611,7 +612,7 @@ var _ = Describe("Controller", func() {
 				Expect(err).To(MatchError("failed to write PIDFILE"))
 
 				Expect(agentRunner.WritePIDCall.CallCount).To(Equal(1))
-				Expect(logger.Messages).To(ContainSequence([]fakes.LoggerMessage{
+				Expect(logger.Messages()).To(ContainSequence([]fakes.LoggerMessage{
 					{
 						Action: "controller.configure-server.is-last-node",
 					},

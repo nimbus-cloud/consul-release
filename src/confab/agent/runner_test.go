@@ -8,9 +8,10 @@ import (
 	"os"
 	"path/filepath"
 
+	"code.cloudfoundry.org/lager"
+
 	"github.com/cloudfoundry-incubator/consul-release/src/confab/agent"
 	"github.com/cloudfoundry-incubator/consul-release/src/confab/fakes"
-	"github.com/pivotal-golang/lager"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -69,7 +70,7 @@ var _ = Describe("Runner", func() {
 			_, err = os.Stat(runner.PIDFile)
 			Expect(err).To(MatchError(ContainSubstring("no such file or directory")))
 
-			Expect(logger.Messages).To(ContainSequence([]fakes.LoggerMessage{
+			Expect(logger.Messages()).To(ContainSequence([]fakes.LoggerMessage{
 				{
 					Action: "agent-runner.cleanup.remove",
 					Data: []lager.Data{{
@@ -89,7 +90,7 @@ var _ = Describe("Runner", func() {
 				err := runner.Cleanup()
 				Expect(err).To(MatchError(expectedError))
 
-				Expect(logger.Messages).To(ContainSequence([]fakes.LoggerMessage{
+				Expect(logger.Messages()).To(ContainSequence([]fakes.LoggerMessage{
 					{
 						Action: "agent-runner.cleanup.remove",
 						Data: []lager.Data{{
@@ -128,7 +129,7 @@ var _ = Describe("Runner", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				Expect(runner.Stop()).To(Succeed())
-				Expect(logger.Messages).To(ContainSequence([]fakes.LoggerMessage{
+				Expect(logger.Messages()).To(ContainSequence([]fakes.LoggerMessage{
 					{
 						Action: "agent-runner.stop.get-process",
 					},
@@ -159,7 +160,7 @@ var _ = Describe("Runner", func() {
 			It("returns an error", func() {
 				runner.PIDFile = "/tmp/nope-i-do-not-exist"
 				Expect(runner.Stop()).To(MatchError(ContainSubstring("no such file or directory")))
-				Expect(logger.Messages).To(ContainSequence([]fakes.LoggerMessage{
+				Expect(logger.Messages()).To(ContainSequence([]fakes.LoggerMessage{
 					{
 						Action: "agent-runner.stop.get-process",
 					},
@@ -205,8 +206,8 @@ var _ = Describe("Runner", func() {
 				Expect(processIsRunning(runner)).To(BeTrue())
 			})
 
+			done := make(chan struct{})
 			By("checking that Wait() blocks", func() {
-				done := make(chan struct{})
 				go func() {
 					if err := runner.Wait(); err != nil {
 						panic(err)
@@ -225,7 +226,7 @@ var _ = Describe("Runner", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				Expect(runner.Wait()).To(Succeed())
-				Expect(logger.Messages).To(ContainSequence([]fakes.LoggerMessage{
+				Expect(logger.Messages()).To(ContainSequence([]fakes.LoggerMessage{
 					{
 						Action: "agent-runner.wait.get-process",
 					},
@@ -250,13 +251,15 @@ var _ = Describe("Runner", func() {
 			By("checking that the process no longer exists", func() {
 				Eventually(func() bool { return processIsRunning(runner) }).Should(BeFalse())
 			})
+
+			Eventually(done).Should(Receive())
 		})
 
 		Context("when the PID file cannot be read", func() {
 			It("returns an error", func() {
 				runner.PIDFile = "/tmp/nope-i-do-not-exist"
 				Expect(runner.Wait()).To(MatchError(ContainSubstring("no such file or directory")))
-				Expect(logger.Messages).To(ContainSequence([]fakes.LoggerMessage{
+				Expect(logger.Messages()).To(ContainSequence([]fakes.LoggerMessage{
 					{
 						Action: "agent-runner.wait.get-process",
 					},
@@ -287,7 +290,7 @@ var _ = Describe("Runner", func() {
 			pid, err := getPID(runner)
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(logger.Messages).To(ContainSequence([]fakes.LoggerMessage{
+			Expect(logger.Messages()).To(ContainSequence([]fakes.LoggerMessage{
 				{
 					Action: "agent-runner.run.write-pidfile",
 					Data: []lager.Data{{
@@ -327,7 +330,7 @@ var _ = Describe("Runner", func() {
 			pid, err := getPID(runner)
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(logger.Messages).To(ContainSequence([]fakes.LoggerMessage{
+			Expect(logger.Messages()).To(ContainSequence([]fakes.LoggerMessage{
 				{
 					Action: "agent-runner.run.start",
 					Data: []lager.Data{{
@@ -396,39 +399,12 @@ var _ = Describe("Runner", func() {
 			Expect(stderrBytes.String()).To(Equal("some standard error"))
 		})
 
-		Context("when the pid file already exists", func() {
-			Context("when the pid file points at the pid of a currently running process", func() {
-				It("errors without running the command", func() {
-					myPID := os.Getpid()
-					Expect(ioutil.WriteFile(runner.PIDFile, []byte(fmt.Sprintf("%d", myPID)), 0666)).To(Succeed())
-
-					Expect(runner.Run()).To(MatchError("consul_agent is already running, please stop it first"))
-					Expect(getFakeAgentOutput(runner).PID).To(Equal(0))
-					Expect(logger.Messages).To(ContainSequence([]fakes.LoggerMessage{
-						{
-							Action: "agent-runner.run.consul-already-running",
-							Error:  errors.New("consul_agent is already running, please stop it first"),
-						},
-					}))
-				})
-			})
-
-			Context("when the pid file points to a non-existent process", func() {
-				It("succeeds", func() {
-					Expect(ioutil.WriteFile(runner.PIDFile, []byte("-1"), 0666)).To(Succeed())
-
-					Expect(runner.Run()).To(Succeed())
-					Expect(runner.WritePID()).To(Succeed())
-				})
-			})
-		})
-
 		Context("when starting the process fails", func() {
 			It("returns the error", func() {
 				runner.Path = "/tmp/not-a-thing-we-can-launch"
 				Expect(runner.Run()).To(MatchError(ContainSubstring("no such file or directory")))
 
-				Expect(logger.Messages).To(ContainSequence([]fakes.LoggerMessage{
+				Expect(logger.Messages()).To(ContainSequence([]fakes.LoggerMessage{
 					{
 						Action: "agent-runner.run.start",
 						Data: []lager.Data{{
@@ -463,7 +439,7 @@ var _ = Describe("Runner", func() {
 				runner.ConfigDir = fmt.Sprintf("/tmp/this-directory-does-not-existi-%x", rand.Int31())
 				Expect(runner.Run()).To(MatchError(ContainSubstring("config dir does not exist")))
 
-				Expect(logger.Messages).To(ContainSequence([]fakes.LoggerMessage{
+				Expect(logger.Messages()).To(ContainSequence([]fakes.LoggerMessage{
 					{
 						Action: "agent-runner.run.config-dir-missing",
 						Error:  fmt.Errorf("config dir does not exist: %s", runner.ConfigDir),

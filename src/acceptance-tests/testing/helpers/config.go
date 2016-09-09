@@ -12,6 +12,7 @@ type Config struct {
 	BOSH                  ConfigBOSH     `json:"bosh"`
 	AWS                   ConfigAWS      `json:"aws"`
 	Registry              ConfigRegistry `json:"registry"`
+	ParallelNodes         int            `json:"parallel_nodes"`
 	TurbulenceReleaseName string
 }
 
@@ -23,12 +24,18 @@ type ConfigBOSH struct {
 }
 
 type ConfigAWS struct {
-	Subnet                string   `json:"subnet"`
-	AccessKeyID           string   `json:"access_key_id"`
-	SecretAccessKey       string   `json:"secret_access_key"`
-	DefaultKeyName        string   `json:"default_key_name"`
-	DefaultSecurityGroups []string `json:"default_security_groups"`
-	Region                string   `json:"region"`
+	Subnets               []ConfigSubnet `json:"subnets"`
+	AccessKeyID           string         `json:"access_key_id"`
+	SecretAccessKey       string         `json:"secret_access_key"`
+	DefaultKeyName        string         `json:"default_key_name"`
+	DefaultSecurityGroups []string       `json:"default_security_groups"`
+	Region                string         `json:"region"`
+}
+
+type ConfigSubnet struct {
+	ID    string `json:"id"`
+	Range string `json:"range"`
+	AZ    string `json:"az"`
 }
 
 type ConfigRegistry struct {
@@ -73,6 +80,10 @@ func LoadConfig(configFilePath string) (Config, error) {
 		config.AWS.Region = "us-east-1"
 	}
 
+	if config.ParallelNodes == 0 {
+		config.ParallelNodes = 1
+	}
+
 	return config, nil
 }
 
@@ -88,6 +99,15 @@ func loadConfigJsonFromPath(configFilePath string) (Config, error) {
 	}
 
 	return config, nil
+}
+
+func ConsulReleaseVersion() string {
+	version := os.Getenv("CONSUL_RELEASE_VERSION")
+	if version == "" {
+		version = "latest"
+	}
+
+	return version
 }
 
 func ConfigPath() (string, error) {

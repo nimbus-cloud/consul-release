@@ -3,49 +3,56 @@ package config
 import (
 	"crypto/sha1"
 	"encoding/base64"
-	"fmt"
 	"path/filepath"
-	"strings"
 
 	"golang.org/x/crypto/pbkdf2"
 )
 
 type ConsulConfig struct {
-	Server               bool              `json:"server"`
-	Domain               string            `json:"domain"`
-	Datacenter           string            `json:"datacenter"`
-	DataDir              string            `json:"data_dir"`
-	LogLevel             string            `json:"log_level"`
-	NodeName             string            `json:"node_name"`
-	Ports                ConsulConfigPorts `json:"ports"`
-	RejoinAfterLeave     bool              `json:"rejoin_after_leave"`
-	RetryJoin            []string          `json:"retry_join"`
-	BindAddr             string            `json:"bind_addr"`
-	DisableRemoteExec    bool              `json:"disable_remote_exec"`
-	DisableUpdateCheck   bool              `json:"disable_update_check"`
-	Protocol             int               `json:"protocol"`
-	VerifyOutgoing       *bool             `json:"verify_outgoing,omitempty"`
-	VerifyIncoming       *bool             `json:"verify_incoming,omitempty"`
-	VerifyServerHostname *bool             `json:"verify_server_hostname,omitempty"`
-	CAFile               *string           `json:"ca_file,omitempty"`
-	KeyFile              *string           `json:"key_file,omitempty"`
-	CertFile             *string           `json:"cert_file,omitempty"`
-	Encrypt              *string           `json:"encrypt,omitempty"`
-	BootstrapExpect      *int              `json:"bootstrap_expect,omitempty"`
+	Server               bool                  `json:"server"`
+	Domain               string                `json:"domain"`
+	Datacenter           string                `json:"datacenter"`
+	DataDir              string                `json:"data_dir"`
+	LogLevel             string                `json:"log_level"`
+	NodeName             string                `json:"node_name"`
+	Ports                ConsulConfigPorts     `json:"ports"`
+	RejoinAfterLeave     bool                  `json:"rejoin_after_leave"`
+	RetryJoin            []string              `json:"retry_join"`
+	RetryJoinWAN         []string              `json:"retry_join_wan"`
+	BindAddr             string                `json:"bind_addr"`
+	DisableRemoteExec    bool                  `json:"disable_remote_exec"`
+	DisableUpdateCheck   bool                  `json:"disable_update_check"`
+	Protocol             int                   `json:"protocol"`
+	VerifyOutgoing       *bool                 `json:"verify_outgoing,omitempty"`
+	VerifyIncoming       *bool                 `json:"verify_incoming,omitempty"`
+	VerifyServerHostname *bool                 `json:"verify_server_hostname,omitempty"`
+	CAFile               *string               `json:"ca_file,omitempty"`
+	KeyFile              *string               `json:"key_file,omitempty"`
+	CertFile             *string               `json:"cert_file,omitempty"`
+	Encrypt              *string               `json:"encrypt,omitempty"`
+	BootstrapExpect      *int                  `json:"bootstrap_expect,omitempty"`
+	DnsConfig            ConsulConfigDnsConfig `json:"dns_config"`
 }
 
 type ConsulConfigPorts struct {
 	DNS int `json:"dns"`
 }
 
-func GenerateConfiguration(config Config) ConsulConfig {
+type ConsulConfigDnsConfig struct {
+	AllowStale bool   `json:"allow_stale"`
+	MaxStale   string `json:"max_stale"`
+}
+
+func GenerateConfiguration(config Config, configDir, nodeName string) ConsulConfig {
 	lan := config.Consul.Agent.Servers.LAN
 	if lan == nil {
 		lan = []string{}
 	}
 
-	nodeName := strings.Replace(config.Node.Name, "_", "-", -1)
-	nodeName = fmt.Sprintf("%s-%d", nodeName, config.Node.Index)
+	wan := config.Consul.Agent.Servers.WAN
+	if wan == nil {
+		wan = []string{}
+	}
 
 	isServer := config.Consul.Agent.Mode == "server"
 
@@ -53,7 +60,7 @@ func GenerateConfiguration(config Config) ConsulConfig {
 		Server:     isServer,
 		Domain:     config.Consul.Agent.Domain,
 		Datacenter: config.Consul.Agent.Datacenter,
-		DataDir:    "/var/vcap/store/consul_agent",
+		DataDir:    config.Path.DataDir,
 		LogLevel:   config.Consul.Agent.LogLevel,
 		NodeName:   nodeName,
 		Ports: ConsulConfigPorts{
@@ -61,16 +68,21 @@ func GenerateConfiguration(config Config) ConsulConfig {
 		},
 		RejoinAfterLeave:   true,
 		RetryJoin:          lan,
+		RetryJoinWAN:       wan,
 		BindAddr:           config.Node.ExternalIP,
 		DisableRemoteExec:  true,
 		DisableUpdateCheck: true,
 		Protocol:           config.Consul.Agent.ProtocolVersion,
+		DnsConfig: ConsulConfigDnsConfig{
+			AllowStale: config.Consul.Agent.DnsConfig.AllowStale,
+			MaxStale:   config.Consul.Agent.DnsConfig.MaxStale,
+		},
 	}
 
 	consulConfig.VerifyOutgoing = boolPtr(true)
 	consulConfig.VerifyIncoming = boolPtr(true)
 	consulConfig.VerifyServerHostname = boolPtr(true)
-	certsDir := "/var/vcap/jobs/consul_agent/config/certs"
+	certsDir := filepath.Join(configDir, "certs")
 	consulConfig.CAFile = strPtr(filepath.Join(certsDir, "ca.crt"))
 
 	if isServer {

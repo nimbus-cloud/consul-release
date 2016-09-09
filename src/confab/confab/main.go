@@ -9,14 +9,15 @@ import (
 	"os/exec"
 	"time"
 
+	"code.cloudfoundry.org/clock"
+	"code.cloudfoundry.org/lager"
+
 	"github.com/cloudfoundry-incubator/consul-release/src/confab"
 	"github.com/cloudfoundry-incubator/consul-release/src/confab/agent"
 	"github.com/cloudfoundry-incubator/consul-release/src/confab/chaperon"
 	"github.com/cloudfoundry-incubator/consul-release/src/confab/config"
 	"github.com/hashicorp/consul/api"
 	consulagent "github.com/hashicorp/consul/command/agent"
-	"github.com/pivotal-golang/clock"
-	"github.com/pivotal-golang/lager"
 )
 
 type runner interface {
@@ -129,6 +130,11 @@ func main() {
 		if err != nil {
 			printUsageAndExit(fmt.Sprintf("\"consul_config_dir\" %q could not be found",
 				controller.Config.Path.ConsulConfigDir), flagSet)
+		}
+
+		if chaperon.IsRunningProcess(agentRunner.PIDFile) {
+			stderr.Println("consul_agent is already running, please stop it first")
+			os.Exit(1)
 		}
 
 		if len(agentClient.ExpectedMembers) == 0 {

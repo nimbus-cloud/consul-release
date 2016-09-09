@@ -6,9 +6,10 @@ import (
 	"io/ioutil"
 	"os"
 
+	"code.cloudfoundry.org/lager"
+
 	"github.com/cloudfoundry-incubator/consul-release/src/confab/config"
 	"github.com/cloudfoundry-incubator/consul-release/src/confab/fakes"
-	"github.com/pivotal-golang/lager"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -49,19 +50,19 @@ var _ = Describe("ServiceDefiner", func() {
 					},
 				},
 			})
-			Expect(logger.Messages).To(ContainElement(fakes.LoggerMessage{
+			Expect(logger.Messages()).To(ContainElement(fakes.LoggerMessage{
 				Action: "service-definer.generate-definitions.define",
 				Data: []lager.Data{{
 					"service": "router",
 				}},
 			}))
-			Expect(logger.Messages).To(ContainElement(fakes.LoggerMessage{
+			Expect(logger.Messages()).To(ContainElement(fakes.LoggerMessage{
 				Action: "service-definer.generate-definitions.define",
 				Data: []lager.Data{{
 					"service": "cloud_controller",
 				}},
 			}))
-			Expect(logger.Messages).To(ContainElement(fakes.LoggerMessage{
+			Expect(logger.Messages()).To(ContainElement(fakes.LoggerMessage{
 				Action: "service-definer.generate-definitions.define",
 				Data: []lager.Data{{
 					"service": "doppler",
@@ -488,7 +489,7 @@ var _ = Describe("ServiceDefiner", func() {
 				},
 			})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(logger.Messages).To(ContainSequence([]fakes.LoggerMessage{
+			Expect(logger.Messages()).To(ContainSequence([]fakes.LoggerMessage{
 				{
 					Action: "service-definer.write-definitions.write",
 					Data: []lager.Data{{
@@ -663,7 +664,7 @@ var _ = Describe("ServiceDefiner", func() {
 				})
 
 				Expect(err).To(MatchError(ContainSubstring("no such file or directory")))
-				Expect(logger.Messages).To(ContainSequence([]fakes.LoggerMessage{
+				Expect(logger.Messages()).To(ContainSequence([]fakes.LoggerMessage{
 					{
 						Action: "service-definer.write-definitions.write",
 						Data: []lager.Data{{
@@ -704,7 +705,7 @@ var _ = Describe("ServiceDefiner", func() {
 				})
 
 				Expect(err).To(MatchError(ContainSubstring("bad file descriptor")))
-				Expect(logger.Messages).To(ContainSequence([]fakes.LoggerMessage{
+				Expect(logger.Messages()).To(ContainSequence([]fakes.LoggerMessage{
 					{
 						Action: "service-definer.write-definitions.write",
 						Data: []lager.Data{{

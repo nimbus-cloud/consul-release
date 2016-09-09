@@ -25,9 +25,9 @@ compilation:
   cloud_properties:
     availability_zone: AWS_AVAILABILITY_ZONE # REPLACE ME
     ephemeral_disk:
-      size: 1024
+      size: 10240
       type: gp2
-    instance_type: m3.medium
+    instance_type: c3.large
 
 networks:
 - name: consats
@@ -44,6 +44,7 @@ networks:
 properties:
   consul:
     acceptance_tests:
+      consul_release_version: latest # REPLACE ME
       aws:
         access_key_id: AWS_ACCESS_KEY_ID # REPLACE ME
         secret_access_key: AWS_SECRET_ACCESS_KEY # REPLACE ME
@@ -51,7 +52,10 @@ properties:
         default_key_name: bosh
         default_security_groups:
         - AWS_SECURITY_GROUP_NAME # REPLACE ME
-        subnet: AWS_SUBNET_ID # REPLACE ME
+        subnets:
+        - id: AWS_SUBNET_ID # REPLACE ME
+          range: AWS_SUBNET_RANGE # REPLACE ME
+          az: AWS_SUBNET_AZ # REPLACE ME
       bosh:
         target: BOSH_TARGET # REPLACE ME
         username: BOSH_USERNAME # REPLACE ME
@@ -72,7 +76,7 @@ resource_pools:
   cloud_properties:
     availability_zone: AWS_AVAILABILITY_ZONE # REPLACE ME
     ephemeral_disk:
-      size: 1024
+      size: 10240
       type: gp2
     instance_type: m3.medium
 

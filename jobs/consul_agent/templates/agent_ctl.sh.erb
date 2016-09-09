@@ -1,97 +1,15 @@
 #!/bin/bash -exu
 
-LOG_DIR=/var/vcap/sys/log/consul_agent
+SCRIPT_NAME=$(basename $0)
 RUN_DIR=/var/vcap/sys/run/consul_agent
-DATA_DIR=/var/vcap/store/consul_agent
-CONF_DIR=/var/vcap/jobs/consul_agent/config
-CERT_DIR=$CONF_DIR/certs
-PKG=/var/vcap/packages/consul
+LOG_DIR=/var/vcap/sys/log/consul_agent
 JOB_DIR=/var/vcap/jobs/consul_agent
-PIDFILE=$RUN_DIR/consul_agent.pid
+CONFAB_PACKAGE=/var/vcap/packages/confab
 
-function main() {
-  local confab_package
-  confab_package=/var/vcap/packages/confab
+exec > >(tee -a >(logger -p user.info -t vcap.${SCRIPT_NAME}.stdout) | awk -W interactive '{lineWithDate="echo [`date +\"%Y-%m-%d %H:%M:%S%z\"`] \"" $0 "\""; system(lineWithDate)  }' >> $LOG_DIR/${SCRIPT_NAME}.log)
+exec 2> >(tee -a >(logger -p user.error -t vcap.${SCRIPT_NAME}.stderr) | awk -W interactive '{lineWithDate="echo [`date +\"%Y-%m-%d %H:%M:%S%z\"`] \"" $0 "\""; system(lineWithDate)  }' >> $LOG_DIR/${SCRIPT_NAME}.err.log)
 
-  source /var/vcap/packages/consul-common/utils.sh
-
-  mkdir -p /var/vcap/sys/log/monit
-  exec 1>> /var/vcap/sys/log/monit/consul_agent.out.log
-  exec 2>> /var/vcap/sys/log/monit/consul_agent.err.log
-
-  case $1 in
-    start)
-      start "${confab_package}"
-      ;;
-
-    stop)
-      stop "${confab_package}"
-      ;;
-
-    *)
-      echo "Usage: $0 {start|stop}"
-      ;;
-  esac
-}
-
-function setup_resolvconf() {
-  local resolvconf_file
-  resolvconf_file=/etc/resolvconf/resolv.conf.d/head
-
-  if ! grep -qE '127.0.0.1\b' "${resolvconf_file}"; then
-	  if [[ "$(stat -c "%s" "${resolvconf_file}")" = "0" ]]; then
-		  echo 'nameserver 127.0.0.1' > "${resolvconf_file}"
-	  else
-		  sed -i -e '1i nameserver 127.0.0.1' "${resolvconf_file}"
-	  fi
-  fi
-
-  resolvconf -u
-}
-
-function start() {
-  local confab_package
-  confab_package="${1}"
-
-  pid_guard "${PIDFILE}" "consul_agent"
-
-  mkdir -p "${LOG_DIR}"
-  chown -R vcap:vcap "${LOG_DIR}"
-
-  mkdir -p "${RUN_DIR}"
-  chown -R vcap:vcap "${RUN_DIR}"
-
-  mkdir -p "${DATA_DIR}"
-  chown -R vcap:vcap "${DATA_DIR}"
-
-  mkdir -p "${CONF_DIR}"
-  chown -R vcap:vcap "${CONF_DIR}"
-
-  chown vcap:vcap ${CERT_DIR}/*.{crt,key}
-  chmod 640 ${CERT_DIR}/*.{crt,key}
-
-  # "Consul uses a significant amount of virtual memory, since LMDB uses
-  # mmap() underneath. It uses about 700MB of a 32bit system and 40GB on a
-  # 64bit system."
-  #
-  # this mainly applies to bosh-lite
-  ulimit -v unlimited
-  ulimit -n 4096
-
-  setup_resolvconf
-
-  local server
-  server=<%=p("consul.agent.mode") == "server"%>
-
-  setcap cap_net_bind_service=+ep $PKG/bin/consul
-
-  GOMAXPROCS=$(nproc)
-  if [ "$GOMAXPROCS" = "1" ]; then
-    GOMAXPROCS=2
-  fi
-
-  export GOMAXPROCS
-
+function start_confab() {
   local nameservers
   nameservers=("$(cat /etc/resolv.conf | grep nameserver | awk '{print $2}' | grep -Ev '127.0.0.1\b')")
 
@@ -102,23 +20,38 @@ function start() {
     recursors="${recursors} -recursor=${nameserver}"
   done
 
-  chpst -u vcap:vcap "${confab_package}/bin/confab" \
+  "${CONFAB_PACKAGE}/bin/confab" \
     start \
     ${recursors} \
-    --config-file ${JOB_DIR}/confab.json \
-    2> >(tee -a ${LOG_DIR}/consul_agent.stderr.log | logger -p user.error -t vcap.consul-agent) \
-    1> >(tee -a ${LOG_DIR}/consul_agent.stdout.log | logger -p user.info  -t vcap.consul-agent)
+    --config-file "${JOB_DIR}/confab.json" \
+    1> >(tee -a ${LOG_DIR}/consul_agent.stdout.log | logger -p user.info -t vcap.consul-agent) \
+    2> >(tee -a ${LOG_DIR}/consul_agent.stderr.log | logger -p user.error -t vcap.consul-agent)
 }
 
-function stop() {
-  local confab_package
-  confab_package="${1}"
-
-  "${confab_package}/bin/confab" \
+function stop_confab() {
+  "${CONFAB_PACKAGE}/bin/confab" \
     stop \
-    --config-file ${JOB_DIR}/confab.json \
-    2> >(tee -a ${LOG_DIR}/consul_agent.stderr.log | logger -p user.error -t vcap.consul-agent) \
-    1> >(tee -a ${LOG_DIR}/consul_agent.stdout.log | logger -p user.info  -t vcap.consul-agent)
+    --config-file "${JOB_DIR}/confab.json" \
+    1> >(tee -a ${LOG_DIR}/consul_agent.stdout.log | logger -p user.info -t vcap.consul-agent) \
+    2> >(tee -a ${LOG_DIR}/consul_agent.stderr.log | logger -p user.error -t vcap.consul-agent)
+}
+
+function main() {
+  mkdir -p "${RUN_DIR}"
+
+  case ${1} in
+        start)
+          start_confab
+          ;;
+
+        stop)
+          stop_confab
+          ;;
+
+        *)
+    echo "Usage: ${0} {start|stop}"
+          ;;
+  esac
 }
 
 main $@

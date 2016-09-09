@@ -3,8 +3,9 @@ name: consul_agent
 
 templates:
   agent_ctl.sh.erb: bin/agent_ctl
-  confab.json.erb: confab.json
   join_ctl.sh.erb: bin/join_ctl
+  pre-start.erb: bin/pre-start
+  confab.json.erb: confab.json
   ca.crt.erb: config/certs/ca.crt
   server.crt.erb: config/certs/server.crt
   server.key.erb: config/certs/server.key
@@ -12,7 +13,6 @@ templates:
   agent.key.erb: config/certs/agent.key
 
 packages:
-  - consul-common
   - consul
   - confab
 
@@ -47,6 +47,14 @@ properties:
   consul.agent.protocol_version:
     description: "The Consul protocol to use."
     default: 2
+
+  consul.agent.dns_config.allow_stale:
+    description: "Enables a stale query for DNS information. This allows any Consul server, rather than only the leader, to service the request."
+    default: false
+
+  consul.agent.dns_config.max_stale:
+    description: "When allow_stale is specified, this is used to limit how stale results are allowed to be."
+    default: "5s"
 
   consul.agent.domain:
     description: "Domain suffix for DNS"

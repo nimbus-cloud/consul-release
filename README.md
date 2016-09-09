@@ -69,7 +69,7 @@ We assume you have already deployed and targeted a BOSH director. For more instr
 
 ### 1. Uploading a stemcell
 
-Find the "BOSH Lite Warden" stemcell you wish to use. [bosh.io](https://bosh.io/stemcells) provides a resource to find and download stemcells.  Then run `bosh upload release STEMCELL_URL_OR_PATH_TO_DOWNLOADED_STEMCELL`.
+Find the "BOSH Lite Warden" stemcell you wish to use. [bosh.io](https://bosh.io/stemcells) provides a resource to find and download stemcells.  Then run `bosh upload stemcell STEMCELL_URL_OR_PATH_TO_DOWNLOADED_STEMCELL`.
 
 ### 2. Creating a release
 
@@ -100,10 +100,16 @@ using certstrap. This repository contains a helper script, `scripts/generate-cer
 This script uses certstrap to initialize a certificate authority (CA), and
 generate the certificates and keys for Consul.
 
+2.  All servers must have a certificate valid for `server.<datacenter>.<domain>` or 
+the client will reject the handshake.
+For a default consul configuration, this means that a server certificate with the common name `server.dc1.cf.internal` will need to be created.
+Further documentation concerning TLS encryption may be found on the official consul [documentation](https://www.consul.io/docs/agent/encryption.html).
+
 If you already have a CA, you may have an existing workflow. You can modify
 the `generate-certs` script to use your existing CA instead of generating a new one.
 
 The `generate-certs` script outputs files to the `./consul-certs` directory.
+
 
 2. Create Gossip Encryption Keys:
 To create an encryption key for use in the serf gossip protocol, provide an
@@ -178,20 +184,20 @@ database:
 7   templates:
 8   - name: database
 9     release: database
-10   - name: consul_agent
-11     release: consul
-12   properties:
-13     consul:
-14       agent:
-15         services:
-16           big_database:
-17             name: big_database
-18             tags:
-19             - db
-20             - persistence
-21             check:
-22               script: /bin/check_db
-23               interval: 10s
+10  - name: consul_agent
+11    release: consul
+12  properties:
+13    consul:
+14      agent:
+15        services:
+16          big_database:
+17            name: big_database
+18            tags:
+19            - db
+20            - persistence
+21            check:
+22              script: /bin/check_db
+23              interval: 10s
 ```
 
 In this example we are defining a "database" service that we want to make
@@ -233,17 +239,17 @@ jobs:
   templates:
   - name: database
     release: database
-   - name: consul_agent
-     release: consul
-   properties:
-     consul:
-       agent:
-         services:
-           database:
-             check:
-               name: dns_health_check
-               script: /var/vcap/jobs/database/bin/dns_health_check
-               interval: 3s
+  - name: consul_agent
+    release: consul
+  properties:
+    consul:
+      agent:
+        services:
+          database:
+            check:
+              name: dns_health_check
+              script: /var/vcap/jobs/database/bin/dns_health_check
+              interval: 3s
 ```
 
 In the `check` section of that definition, we can see that it assumes a script

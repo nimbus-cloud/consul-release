@@ -3,10 +3,10 @@ package deploy_test
 import (
 	"time"
 
-	"github.com/cloudfoundry-incubator/consul-release/src/acceptance-tests/testing/consul"
+	"github.com/cloudfoundry-incubator/consul-release/src/acceptance-tests/testing/consulclient"
 	"github.com/cloudfoundry-incubator/consul-release/src/acceptance-tests/testing/helpers"
 	"github.com/pivotal-cf-experimental/bosh-test/bosh"
-	"github.com/pivotal-cf-experimental/destiny"
+	"github.com/pivotal-cf-experimental/destiny/consul"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -14,8 +14,8 @@ import (
 
 var _ = Describe("Scaling up Instances", func() {
 	var (
-		manifest  destiny.Manifest
-		kv        consul.HTTPKV
+		manifest  consul.Manifest
+		kv        consulclient.HTTPKV
 		testKey   string
 		testValue string
 		spammer   *helpers.Spammer
@@ -23,7 +23,7 @@ var _ = Describe("Scaling up Instances", func() {
 
 	AfterEach(func() {
 		if !CurrentGinkgoTestDescription().Failed {
-			err := client.DeleteDeployment(manifest.Name)
+			err := boshClient.DeleteDeployment(manifest.Name)
 			Expect(err).NotTo(HaveOccurred())
 		}
 	})
@@ -36,15 +36,12 @@ var _ = Describe("Scaling up Instances", func() {
 			testKey = "consul-key-" + guid
 			testValue = "consul-value-" + guid
 
-			manifest, kv, err = helpers.DeployConsulWithInstanceCount(1, client, config)
+			manifest, kv, err = helpers.DeployConsulWithInstanceCount(1, boshClient, config)
 			Expect(err).NotTo(HaveOccurred())
 
 			Eventually(func() ([]bosh.VM, error) {
-				return client.DeploymentVMs(manifest.Name)
-			}, "1m", "10s").Should(ConsistOf([]bosh.VM{
-				{"running"},
-				{"running"},
-			}))
+				return boshClient.DeploymentVMs(manifest.Name)
+			}, "1m", "10s").Should(ConsistOf(helpers.GetVMsFromManifest(manifest)))
 		})
 
 		It("provides a functioning cluster after the scale up", func() {
@@ -54,25 +51,22 @@ var _ = Describe("Scaling up Instances", func() {
 			})
 
 			By("scaling from 1 nodes to 3", func() {
-				manifest.Jobs[0], manifest.Properties = helpers.SetJobInstanceCount(manifest.Jobs[0], manifest.Networks[0], manifest.Properties, 3)
+				var err error
+				manifest.Jobs[0], manifest.Properties, err = consul.SetJobInstanceCount(manifest.Jobs[0], manifest.Networks[0], manifest.Properties, 3)
+				Expect(err).NotTo(HaveOccurred())
 
 				members := manifest.ConsulMembers()
-				Expect(members).To(HaveLen(4))
+				Expect(members).To(HaveLen(6))
 
 				yaml, err := manifest.ToYAML()
 				Expect(err).NotTo(HaveOccurred())
 
-				err = client.Deploy(yaml)
+				_, err = boshClient.Deploy(yaml)
 				Expect(err).NotTo(HaveOccurred())
 
 				Eventually(func() ([]bosh.VM, error) {
-					return client.DeploymentVMs(manifest.Name)
-				}, "1m", "10s").Should(ConsistOf([]bosh.VM{
-					{"running"},
-					{"running"},
-					{"running"},
-					{"running"},
-				}))
+					return boshClient.DeploymentVMs(manifest.Name)
+				}, "1m", "10s").Should(ConsistOf(helpers.GetVMsFromManifest(manifest)))
 			})
 
 			By("setting a persistent value to check the cluster is up after the scale up", func() {
@@ -90,19 +84,14 @@ var _ = Describe("Scaling up Instances", func() {
 			testKey = "consul-key-" + guid
 			testValue = "consul-value-" + guid
 
-			manifest, kv, err = helpers.DeployConsulWithInstanceCount(3, client, config)
+			manifest, kv, err = helpers.DeployConsulWithInstanceCount(3, boshClient, config)
 			Expect(err).NotTo(HaveOccurred())
 
 			Eventually(func() ([]bosh.VM, error) {
-				return client.DeploymentVMs(manifest.Name)
-			}, "1m", "10s").Should(ConsistOf([]bosh.VM{
-				{"running"},
-				{"running"},
-				{"running"},
-				{"running"},
-			}))
+				return boshClient.DeploymentVMs(manifest.Name)
+			}, "1m", "10s").Should(ConsistOf(helpers.GetVMsFromManifest(manifest)))
 
-			spammer = helpers.NewSpammer(kv, 1*time.Second)
+			spammer = helpers.NewSpammer(kv, 1*time.Second, "test-consumer-0")
 		})
 
 		It("persists data throughout the scale up", func() {
@@ -112,28 +101,23 @@ var _ = Describe("Scaling up Instances", func() {
 			})
 
 			By("scaling from 3 nodes to 5", func() {
-				manifest.Jobs[0], manifest.Properties = helpers.SetJobInstanceCount(manifest.Jobs[0], manifest.Networks[0], manifest.Properties, 5)
+				var err error
+				manifest.Jobs[0], manifest.Properties, err = consul.SetJobInstanceCount(manifest.Jobs[0], manifest.Networks[0], manifest.Properties, 5)
+				Expect(err).NotTo(HaveOccurred())
 
 				members := manifest.ConsulMembers()
-				Expect(members).To(HaveLen(6))
+				Expect(members).To(HaveLen(8))
 
 				yaml, err := manifest.ToYAML()
 				Expect(err).NotTo(HaveOccurred())
 
 				spammer.Spam()
-				err = client.Deploy(yaml)
+				_, err = boshClient.Deploy(yaml)
 				Expect(err).NotTo(HaveOccurred())
 
 				Eventually(func() ([]bosh.VM, error) {
-					return client.DeploymentVMs(manifest.Name)
-				}, "1m", "10s").Should(ConsistOf([]bosh.VM{
-					{"running"},
-					{"running"},
-					{"running"},
-					{"running"},
-					{"running"},
-					{"running"},
-				}))
+					return boshClient.DeploymentVMs(manifest.Name)
+				}, "1m", "10s").Should(ConsistOf(helpers.GetVMsFromManifest(manifest)))
 
 				spammer.Stop()
 			})
