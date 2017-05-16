@@ -14,7 +14,7 @@ import (
 
 var _ = Describe("Multiple instance rolling deploys", func() {
 	var (
-		manifest  consul.Manifest
+		manifest  consul.ManifestV2
 		kv        consulclient.HTTPKV
 		testKey   string
 		testValue string
@@ -28,11 +28,11 @@ var _ = Describe("Multiple instance rolling deploys", func() {
 		testKey = "consul-key-" + guid
 		testValue = "consul-value-" + guid
 
-		manifest, kv, err = helpers.DeployConsulWithInstanceCount(3, boshClient, config)
+		manifest, kv, err = helpers.DeployConsulWithInstanceCount("multiple-instance-rolling-deploy", 3, boshClient, config)
 		Expect(err).NotTo(HaveOccurred())
 
 		Eventually(func() ([]bosh.VM, error) {
-			return boshClient.DeploymentVMs(manifest.Name)
+			return helpers.DeploymentVMs(boshClient, manifest.Name)
 		}, "1m", "10s").Should(ConsistOf(helpers.GetVMsFromManifest(manifest)))
 
 		spammer = helpers.NewSpammer(kv, 1*time.Second, "test-consumer-0")
@@ -52,7 +52,7 @@ var _ = Describe("Multiple instance rolling deploys", func() {
 		})
 
 		By("deploying", func() {
-			manifest.Jobs[0].Properties.Consul.Agent.LogLevel = "trace"
+			manifest.InstanceGroups[0].Properties.Consul.Agent.LogLevel = "trace"
 
 			yaml, err := manifest.ToYAML()
 			Expect(err).NotTo(HaveOccurred())
@@ -63,7 +63,7 @@ var _ = Describe("Multiple instance rolling deploys", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			Eventually(func() ([]bosh.VM, error) {
-				return boshClient.DeploymentVMs(manifest.Name)
+				return helpers.DeploymentVMs(boshClient, manifest.Name)
 			}, "1m", "10s").Should(ConsistOf(helpers.GetVMsFromManifest(manifest)))
 
 			spammer.Stop()

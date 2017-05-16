@@ -9,38 +9,44 @@ import (
 )
 
 type ConsulConfig struct {
-	Server               bool                  `json:"server"`
-	Domain               string                `json:"domain"`
-	Datacenter           string                `json:"datacenter"`
-	DataDir              string                `json:"data_dir"`
-	LogLevel             string                `json:"log_level"`
-	NodeName             string                `json:"node_name"`
-	Ports                ConsulConfigPorts     `json:"ports"`
-	RejoinAfterLeave     bool                  `json:"rejoin_after_leave"`
-	RetryJoin            []string              `json:"retry_join"`
-	RetryJoinWAN         []string              `json:"retry_join_wan"`
-	BindAddr             string                `json:"bind_addr"`
-	DisableRemoteExec    bool                  `json:"disable_remote_exec"`
-	DisableUpdateCheck   bool                  `json:"disable_update_check"`
-	Protocol             int                   `json:"protocol"`
-	VerifyOutgoing       *bool                 `json:"verify_outgoing,omitempty"`
-	VerifyIncoming       *bool                 `json:"verify_incoming,omitempty"`
-	VerifyServerHostname *bool                 `json:"verify_server_hostname,omitempty"`
-	CAFile               *string               `json:"ca_file,omitempty"`
-	KeyFile              *string               `json:"key_file,omitempty"`
-	CertFile             *string               `json:"cert_file,omitempty"`
-	Encrypt              *string               `json:"encrypt,omitempty"`
-	BootstrapExpect      *int                  `json:"bootstrap_expect,omitempty"`
-	DnsConfig            ConsulConfigDnsConfig `json:"dns_config"`
+	Server               bool                    `json:"server"`
+	Domain               string                  `json:"domain"`
+	Datacenter           string                  `json:"datacenter"`
+	DataDir              string                  `json:"data_dir"`
+	LogLevel             string                  `json:"log_level"`
+	NodeName             string                  `json:"node_name"`
+	Ports                ConsulConfigPorts       `json:"ports"`
+	RejoinAfterLeave     bool                    `json:"rejoin_after_leave"`
+	BindAddr             string                  `json:"bind_addr"`
+	DisableRemoteExec    bool                    `json:"disable_remote_exec"`
+	DisableUpdateCheck   bool                    `json:"disable_update_check"`
+	Protocol             int                     `json:"protocol"`
+	VerifyOutgoing       *bool                   `json:"verify_outgoing,omitempty"`
+	VerifyIncoming       *bool                   `json:"verify_incoming,omitempty"`
+	VerifyServerHostname *bool                   `json:"verify_server_hostname,omitempty"`
+	CAFile               *string                 `json:"ca_file,omitempty"`
+	KeyFile              *string                 `json:"key_file,omitempty"`
+	CertFile             *string                 `json:"cert_file,omitempty"`
+	Encrypt              *string                 `json:"encrypt,omitempty"`
+	DnsConfig            ConsulConfigDnsConfig   `json:"dns_config"`
+	Bootstrap            *bool                   `json:"bootstrap,omitempty"`
+	Performance          ConsulConfigPerformance `json:"performance"`
 }
 
 type ConsulConfigPorts struct {
-	DNS int `json:"dns"`
+	DNS   int `json:"dns,omitempty"`
+	HTTP  int `json:"http,omitempty"`
+	HTTPS int `json:"https,omitempty"`
 }
 
 type ConsulConfigDnsConfig struct {
-	AllowStale bool   `json:"allow_stale"`
-	MaxStale   string `json:"max_stale"`
+	AllowStale      bool   `json:"allow_stale"`
+	MaxStale        string `json:"max_stale"`
+	RecursorTimeout string `json:"recursor_timeout"`
+}
+
+type ConsulConfigPerformance struct {
+	RaftMultiplier int `json:"raft_multiplier"`
 }
 
 func GenerateConfiguration(config Config, configDir, nodeName string) ConsulConfig {
@@ -56,27 +62,39 @@ func GenerateConfiguration(config Config, configDir, nodeName string) ConsulConf
 
 	isServer := config.Consul.Agent.Mode == "server"
 
+	dns := config.Consul.Agent.Ports.DNS
+	if dns == 0 {
+		dns = 53
+	}
+
 	consulConfig := ConsulConfig{
-		Server:     isServer,
-		Domain:     config.Consul.Agent.Domain,
-		Datacenter: config.Consul.Agent.Datacenter,
-		DataDir:    config.Path.DataDir,
-		LogLevel:   config.Consul.Agent.LogLevel,
-		NodeName:   nodeName,
-		Ports: ConsulConfigPorts{
-			DNS: 53,
-		},
+		Server:             isServer,
+		Domain:             config.Consul.Agent.Domain,
+		Datacenter:         config.Consul.Agent.Datacenter,
+		DataDir:            config.Path.DataDir,
+		LogLevel:           config.Consul.Agent.LogLevel,
+		NodeName:           nodeName,
 		RejoinAfterLeave:   true,
-		RetryJoin:          lan,
-		RetryJoinWAN:       wan,
 		BindAddr:           config.Node.ExternalIP,
 		DisableRemoteExec:  true,
 		DisableUpdateCheck: true,
 		Protocol:           config.Consul.Agent.ProtocolVersion,
-		DnsConfig: ConsulConfigDnsConfig{
-			AllowStale: config.Consul.Agent.DnsConfig.AllowStale,
-			MaxStale:   config.Consul.Agent.DnsConfig.MaxStale,
+		Ports: ConsulConfigPorts{
+			DNS: dns,
 		},
+		DnsConfig: ConsulConfigDnsConfig{
+			AllowStale:      config.Consul.Agent.DnsConfig.AllowStale,
+			MaxStale:        config.Consul.Agent.DnsConfig.MaxStale,
+			RecursorTimeout: config.Consul.Agent.DnsConfig.RecursorTimeout,
+		},
+		Performance: ConsulConfigPerformance{
+			RaftMultiplier: 1,
+		},
+	}
+
+	if config.Consul.Agent.RequireSSL {
+		consulConfig.Ports.HTTP = -1
+		consulConfig.Ports.HTTPS = 8500
 	}
 
 	consulConfig.VerifyOutgoing = boolPtr(true)
@@ -98,7 +116,7 @@ func GenerateConfiguration(config Config, configDir, nodeName string) ConsulConf
 	}
 
 	if isServer {
-		consulConfig.BootstrapExpect = intPtr(len(config.Consul.Agent.Servers.LAN))
+		consulConfig.Bootstrap = boolPtr(config.Consul.Agent.Bootstrap)
 	}
 
 	return consulConfig

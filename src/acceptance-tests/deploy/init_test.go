@@ -30,7 +30,6 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 
 	consulReleaseVersion = helpers.ConsulReleaseVersion()
-
 	boshClient = bosh.NewClient(bosh.Config{
 		URL:              fmt.Sprintf("https://%s:25555", config.BOSH.Target),
 		Username:         config.BOSH.Username,
@@ -38,3 +37,15 @@ var _ = BeforeSuite(func() {
 		AllowInsecureSSL: true,
 	})
 })
+
+func lockedDeployments() ([]string, error) {
+	var lockNames []string
+	locks, err := boshClient.Locks()
+	if err != nil {
+		return []string{}, err
+	}
+	for _, lock := range locks {
+		lockNames = append(lockNames, lock.Resource[0])
+	}
+	return lockNames, nil
+}

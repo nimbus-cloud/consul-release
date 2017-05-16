@@ -1,6 +1,8 @@
 package config_test
 
 import (
+	"path/filepath"
+
 	"github.com/cloudfoundry-incubator/consul-release/src/confab/config"
 
 	. "github.com/onsi/ginkgo"
@@ -62,15 +64,21 @@ var _ = Describe("ConsulConfigDefiner", func() {
 		})
 
 		Describe("dns_config", func() {
-			It("defaults to consul defaults", func() {
-				cfg := config.Config{}
-				cfg.Consul.Agent.DnsConfig.MaxStale = "5s"
-				Expect(cfg.Consul.Agent.DnsConfig).To(Equal(config.ConfigConsulAgentDnsConfig{
-					// https://www.consul.io/docs/agent/options.html#allow_stale
-					AllowStale: false,
-					// https://www.consul.io/docs/agent/options.html#max_stale
-					MaxStale: "5s",
-				}))
+			Describe("recursor_timeout", func() {
+				Context("when the `consul.agent.dns_config.recursor_timeout` property is true", func() {
+					It("uses that value", func() {
+						consulConfig = config.GenerateConfiguration(config.Config{
+							Consul: config.ConfigConsul{
+								Agent: config.ConfigConsulAgent{
+									DnsConfig: config.ConfigConsulAgentDnsConfig{
+										RecursorTimeout: "10s",
+									},
+								},
+							},
+						}, configDir, "")
+						Expect(consulConfig.DnsConfig.RecursorTimeout).To(Equal("10s"))
+					})
+				})
 			})
 
 			Describe("allow_stale", func() {
@@ -166,75 +174,9 @@ var _ = Describe("ConsulConfigDefiner", func() {
 			})
 		})
 
-		Describe("ports", func() {
-			It("defaults to a struct containing port 53 for DNS", func() {
-				Expect(consulConfig.Ports).To(Equal(config.ConsulConfigPorts{
-					DNS: 53,
-				}))
-			})
-		})
-
 		Describe("rejoin_after_leave", func() {
 			It("defaults to true", func() {
 				Expect(consulConfig.RejoinAfterLeave).To(BeTrue())
-			})
-		})
-
-		Describe("retry_join", func() {
-			It("defaults to an empty slice of strings", func() {
-				Expect(consulConfig.RetryJoin).To(Equal([]string{}))
-			})
-
-			Context("when `consul.agent.servers.lan` has a list of servers", func() {
-				It("uses those values", func() {
-					consulConfig = config.GenerateConfiguration(config.Config{
-						Consul: config.ConfigConsul{
-							Agent: config.ConfigConsulAgent{
-								Servers: config.ConfigConsulAgentServers{
-									LAN: []string{
-										"first-server",
-										"second-server",
-										"third-server",
-									},
-								},
-							},
-						},
-					}, configDir, "")
-					Expect(consulConfig.RetryJoin).To(Equal([]string{
-						"first-server",
-						"second-server",
-						"third-server",
-					}))
-				})
-			})
-		})
-
-		Describe("retry_join_wan", func() {
-			It("defaults to an empty slice of strings", func() {
-				Expect(consulConfig.RetryJoinWAN).To(Equal([]string{}))
-			})
-
-			Context("when `consul.agent.servers.wan` has a list of servers", func() {
-				It("uses those values", func() {
-					consulConfig = config.GenerateConfiguration(config.Config{
-						Consul: config.ConfigConsul{
-							Agent: config.ConfigConsulAgent{
-								Servers: config.ConfigConsulAgentServers{
-									WAN: []string{
-										"first-wan-server",
-										"second-wan-server",
-										"third-wan-server",
-									},
-								},
-							},
-						},
-					}, configDir, "")
-					Expect(consulConfig.RetryJoinWAN).To(Equal([]string{
-						"first-wan-server",
-						"second-wan-server",
-						"third-wan-server",
-					}))
-				})
 			})
 		})
 
@@ -264,6 +206,53 @@ var _ = Describe("ConsulConfigDefiner", func() {
 		Describe("disable_update_check", func() {
 			It("defaults to true", func() {
 				Expect(consulConfig.DisableUpdateCheck).To(BeTrue())
+			})
+		})
+
+		Describe("ports", func() {
+			Describe("DNS port", func() {
+				It("defaults to 53", func() {
+					Expect(consulConfig.Ports.DNS).To(Equal(53))
+				})
+
+				Context("when `consul.agent.ports.dns` is set", func() {
+					It("uses those values", func() {
+						consulConfig = config.GenerateConfiguration(config.Config{
+							Consul: config.ConfigConsul{
+								Agent: config.ConfigConsulAgent{
+									Ports: config.ConfigConsulAgentPorts{
+										DNS: 5300,
+									},
+								},
+							},
+						}, configDir, "")
+						Expect(consulConfig.Ports.DNS).To(Equal(5300))
+					})
+				})
+			})
+
+			Context("when `consul.agent.require_ssl` is true", func() {
+				BeforeEach(func() {
+					consulConfig = config.GenerateConfiguration(config.Config{
+						Consul: config.ConfigConsul{
+							Agent: config.ConfigConsulAgent{
+								RequireSSL: true,
+							},
+						},
+					}, configDir, "")
+				})
+
+				Describe("HTTP port", func() {
+					It("is disabled", func() {
+						Expect(consulConfig.Ports.HTTP).To(Equal(-1))
+					})
+				})
+
+				Describe("HTTPS port", func() {
+					It("defaults to 8500", func() {
+						Expect(consulConfig.Ports.HTTPS).To(Equal(8500))
+					})
+				})
 			})
 		})
 
@@ -314,7 +303,8 @@ var _ = Describe("ConsulConfigDefiner", func() {
 			It("is the location of the ca file", func() {
 				consulConfig = config.GenerateConfiguration(config.Config{}, "/var/vcap/jobs/consul_agent_windows/config", "")
 				Expect(consulConfig.CAFile).NotTo(BeNil())
-				Expect(*consulConfig.CAFile).To(Equal("/var/vcap/jobs/consul_agent_windows/config/certs/ca.crt"))
+				Expect(filepath.ToSlash(*consulConfig.CAFile)).To(
+					Equal("/var/vcap/jobs/consul_agent_windows/config/certs/ca.crt"))
 			})
 		})
 
@@ -329,7 +319,8 @@ var _ = Describe("ConsulConfigDefiner", func() {
 						},
 					}, configDir, "")
 					Expect(consulConfig.KeyFile).NotTo(BeNil())
-					Expect(*consulConfig.KeyFile).To(Equal("/var/vcap/jobs/consul_agent/config/certs/server.key"))
+					Expect(filepath.ToSlash(*consulConfig.KeyFile)).To(
+						Equal("/var/vcap/jobs/consul_agent/config/certs/server.key"))
 				})
 			})
 
@@ -337,7 +328,8 @@ var _ = Describe("ConsulConfigDefiner", func() {
 				It("is the location of the agent.key file", func() {
 					consulConfig = config.GenerateConfiguration(config.Config{}, configDir, "")
 					Expect(consulConfig.KeyFile).NotTo(BeNil())
-					Expect(*consulConfig.KeyFile).To(Equal("/var/vcap/jobs/consul_agent/config/certs/agent.key"))
+					Expect(filepath.ToSlash(*consulConfig.KeyFile)).To(
+						Equal("/var/vcap/jobs/consul_agent/config/certs/agent.key"))
 				})
 			})
 		})
@@ -353,7 +345,8 @@ var _ = Describe("ConsulConfigDefiner", func() {
 						},
 					}, configDir, "")
 					Expect(consulConfig.CertFile).NotTo(BeNil())
-					Expect(*consulConfig.CertFile).To(Equal("/var/vcap/jobs/consul_agent/config/certs/server.crt"))
+					Expect(filepath.ToSlash(*consulConfig.CertFile)).To(
+						Equal("/var/vcap/jobs/consul_agent/config/certs/server.crt"))
 				})
 			})
 
@@ -361,7 +354,8 @@ var _ = Describe("ConsulConfigDefiner", func() {
 				It("is the location of the agent.key file", func() {
 					consulConfig = config.GenerateConfiguration(config.Config{}, configDir, "")
 					Expect(consulConfig.CertFile).NotTo(BeNil())
-					Expect(*consulConfig.CertFile).To(Equal("/var/vcap/jobs/consul_agent/config/certs/agent.crt"))
+					Expect(filepath.ToSlash(*consulConfig.CertFile)).To(
+						Equal("/var/vcap/jobs/consul_agent/config/certs/agent.crt"))
 				})
 			})
 		})
@@ -402,7 +396,7 @@ var _ = Describe("ConsulConfigDefiner", func() {
 		Describe("bootstrap_expect", func() {
 			Context("when `consul.agent.mode` is not `server`", func() {
 				It("is nil", func() {
-					Expect(consulConfig.BootstrapExpect).To(BeNil())
+					Expect(consulConfig.Bootstrap).To(BeNil())
 				})
 			})
 
@@ -411,7 +405,8 @@ var _ = Describe("ConsulConfigDefiner", func() {
 					consulConfig = config.GenerateConfiguration(config.Config{
 						Consul: config.ConfigConsul{
 							Agent: config.ConfigConsulAgent{
-								Mode: "server",
+								Bootstrap: true,
+								Mode:      "server",
 								Servers: config.ConfigConsulAgentServers{
 									LAN: []string{
 										"first-server",
@@ -422,9 +417,14 @@ var _ = Describe("ConsulConfigDefiner", func() {
 							},
 						},
 					}, configDir, "")
-					Expect(consulConfig.BootstrapExpect).NotTo(BeNil())
-					Expect(*consulConfig.BootstrapExpect).To(Equal(3))
+					Expect(*consulConfig.Bootstrap).To(BeTrue())
 				})
+			})
+		})
+
+		Describe("performance", func() {
+			It("defaults to raft_multiplier to 1", func() {
+				Expect(consulConfig.Performance.RaftMultiplier).To(Equal(1))
 			})
 		})
 	})

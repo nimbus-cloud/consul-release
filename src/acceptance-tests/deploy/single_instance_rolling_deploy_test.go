@@ -12,7 +12,7 @@ import (
 
 var _ = Describe("Single instance rolling deploys", func() {
 	var (
-		manifest  consul.Manifest
+		manifest  consul.ManifestV2
 		kv        consulclient.HTTPKV
 		testKey   string
 		testValue string
@@ -25,11 +25,11 @@ var _ = Describe("Single instance rolling deploys", func() {
 		testKey = "consul-key-" + guid
 		testValue = "consul-value-" + guid
 
-		manifest, kv, err = helpers.DeployConsulWithInstanceCount(1, boshClient, config)
+		manifest, kv, err = helpers.DeployConsulWithInstanceCount("single-instance-rolling-deploy", 1, boshClient, config)
 		Expect(err).NotTo(HaveOccurred())
 
 		Eventually(func() ([]bosh.VM, error) {
-			return boshClient.DeploymentVMs(manifest.Name)
+			return helpers.DeploymentVMs(boshClient, manifest.Name)
 		}, "1m", "10s").Should(ConsistOf(helpers.GetVMsFromManifest(manifest)))
 	})
 
@@ -59,7 +59,7 @@ var _ = Describe("Single instance rolling deploys", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			Eventually(func() ([]bosh.VM, error) {
-				return boshClient.DeploymentVMs(manifest.Name)
+				return helpers.DeploymentVMs(boshClient, manifest.Name)
 			}, "1m", "10s").Should(ConsistOf(helpers.GetVMsFromManifest(manifest)))
 		})
 

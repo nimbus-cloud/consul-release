@@ -7,23 +7,24 @@
       network_spec.default
     end
 
-	if !network
-		_, network = networks.first
-	end
+  if !network
+    _, network = networks.first
+  end
 
-	if !network
-		raise "Could not determine IP via network spec: #{networks}"
-	end
+  if !network
+    raise "Could not determine IP via network spec: #{networks}"
+  end
 
-	network.ip
+  network.ip
   end
 
   {
-	  node: {
-		  name: "#{name}-#{p('consul.agent.zone')}",
-		  index: spec.index,
-		  external_ip: discover_external_ip,
-	  },
-	consul: p('consul'),
-}.to_json
+    node: {
+      name: "#{name}-#{p('consul.agent.zone')}",
+      index: spec.index,
+      external_ip: discover_external_ip,
+      zone: spec.az,
+    },
+    consul: p('consul'),
+  }.to_json
 %>

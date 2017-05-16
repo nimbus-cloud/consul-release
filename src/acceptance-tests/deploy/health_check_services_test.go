@@ -15,21 +15,21 @@ import (
 
 var _ = Describe("Health Check", func() {
 	var (
-		manifest consul.Manifest
+		manifest consul.ManifestV2
 		tcClient testconsumerclient.Client
 	)
 
 	BeforeEach(func() {
 		var err error
 
-		manifest, _, err = helpers.DeployConsulWithInstanceCount(1, boshClient, config)
+		manifest, _, err = helpers.DeployConsulWithInstanceCount("health-check", 3, boshClient, config)
 		Expect(err).NotTo(HaveOccurred())
 
 		Eventually(func() ([]bosh.VM, error) {
-			return boshClient.DeploymentVMs(manifest.Name)
+			return helpers.DeploymentVMs(boshClient, manifest.Name)
 		}, "1m", "10s").Should(ConsistOf(helpers.GetVMsFromManifest(manifest)))
 
-		tcClient = testconsumerclient.New(fmt.Sprintf("http://%s:6769", manifest.Jobs[1].Networks[0].StaticIPs[0]))
+		tcClient = testconsumerclient.New(fmt.Sprintf("http://%s:6769", manifest.InstanceGroups[1].Networks[0].StaticIPs[0]))
 	})
 
 	AfterEach(func() {
@@ -42,12 +42,14 @@ var _ = Describe("Health Check", func() {
 	Context("with an operator defined check script", func() {
 		It("deregisters a service if the health check fails", func() {
 			By("registering a service", func() {
-				manifest.Jobs[0].Properties.Consul.Agent.Services = core.JobPropertiesConsulAgentServices{
+				manifest, err := manifest.SetInstanceCount("test_consumer", 3)
+				Expect(err).NotTo(HaveOccurred())
+				manifest.InstanceGroups[0].Properties.Consul.Agent.Services = core.JobPropertiesConsulAgentServices{
 					"some-service": core.JobPropertiesConsulAgentService{
 						Name: "some-service-name",
 						Check: &core.JobPropertiesConsulAgentServiceCheck{
 							Name:     "some-service-check",
-							Script:   fmt.Sprintf("curl -f %s", fmt.Sprintf("http://%s:6769/health_check", manifest.Jobs[1].Networks[0].StaticIPs[0])),
+							Script:   fmt.Sprintf("curl -f %s", fmt.Sprintf("http://%s:6769/health_check", manifest.InstanceGroups[1].Networks[0].StaticIPs[0])),
 							Interval: "10s",
 						},
 						Tags: []string{"some-service-tag"},
@@ -66,14 +68,14 @@ var _ = Describe("Health Check", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				Eventually(func() ([]bosh.VM, error) {
-					return boshClient.DeploymentVMs(manifest.Name)
+					return helpers.DeploymentVMs(boshClient, manifest.Name)
 				}, "1m", "10s").Should(ConsistOf(helpers.GetVMsFromManifest(manifest)))
 			})
 
 			By("resolving the service address", func() {
 				Eventually(func() ([]string, error) {
 					return tcClient.DNS("some-service-name.service.cf.internal")
-				}, "1m", "10s").Should(ConsistOf(manifest.Jobs[0].Networks[0].StaticIPs))
+				}, "1m", "10s").Should(ConsistOf(manifest.InstanceGroups[0].Networks[0].StaticIPs))
 			})
 
 			By("causing the health check to fail", func() {
@@ -95,20 +97,34 @@ var _ = Describe("Health Check", func() {
 			By("the service should be alive", func() {
 				Eventually(func() ([]string, error) {
 					return tcClient.DNS("some-service-name.service.cf.internal")
-				}, "1m", "10s").Should(ConsistOf(manifest.Jobs[0].Networks[0].StaticIPs))
+				}, "1m", "10s").Should(ConsistOf(manifest.InstanceGroups[0].Networks[0].StaticIPs))
 			})
 		})
 	})
 
 	Context("with the default check script", func() {
+		var (
+			serviceName string
+		)
+
+		BeforeEach(func() {
+			serviceName = "consul-test-consumer"
+			if config.WindowsClients {
+				serviceName = "consul-test-consumer-windows"
+			}
+		})
+
 		It("deregisters a service if the health check fails", func() {
 			By("registering a service", func() {
-				manifest.Jobs[1].Properties = &core.JobProperties{
+				manifest, err := manifest.SetInstanceCount("test_consumer", 3)
+				Expect(err).NotTo(HaveOccurred())
+
+				manifest.InstanceGroups[1].Properties = &core.JobProperties{
 					Consul: &core.JobPropertiesConsul{
 						Agent: core.JobPropertiesConsulAgent{
 							Mode: "client",
 							Services: core.JobPropertiesConsulAgentServices{
-								"consul-test-consumer": core.JobPropertiesConsulAgentService{},
+								serviceName: core.JobPropertiesConsulAgentService{},
 							},
 						},
 					},
@@ -126,14 +142,14 @@ var _ = Describe("Health Check", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				Eventually(func() ([]bosh.VM, error) {
-					return boshClient.DeploymentVMs(manifest.Name)
+					return helpers.DeploymentVMs(boshClient, manifest.Name)
 				}, "1m", "10s").Should(ConsistOf(helpers.GetVMsFromManifest(manifest)))
 			})
 
 			By("resolving the service address", func() {
 				Eventually(func() ([]string, error) {
-					return tcClient.DNS("consul-test-consumer.service.cf.internal")
-				}, "1m", "10s").Should(ConsistOf(manifest.Jobs[1].Networks[0].StaticIPs))
+					return tcClient.DNS(fmt.Sprintf("%s.service.cf.internal", serviceName))
+				}, "1m", "10s").Should(ConsistOf(manifest.InstanceGroups[1].Networks[0].StaticIPs))
 			})
 
 			By("causing the health check to fail", func() {
@@ -143,7 +159,7 @@ var _ = Describe("Health Check", func() {
 
 			By("the service should be deregistered", func() {
 				Eventually(func() ([]string, error) {
-					return tcClient.DNS("consul-test-consumer.service.cf.internal")
+					return tcClient.DNS(fmt.Sprintf("%s.service.cf.internal", serviceName))
 				}, "1m", "10s").Should(HaveLen(2))
 			})
 
@@ -154,8 +170,8 @@ var _ = Describe("Health Check", func() {
 
 			By("the service should be alive", func() {
 				Eventually(func() ([]string, error) {
-					return tcClient.DNS("consul-test-consumer.service.cf.internal")
-				}, "1m", "10s").Should(ConsistOf(manifest.Jobs[1].Networks[0].StaticIPs))
+					return tcClient.DNS(fmt.Sprintf("%s.service.cf.internal", serviceName))
+				}, "1m", "10s").Should(ConsistOf(manifest.InstanceGroups[1].Networks[0].StaticIPs))
 			})
 		})
 	})

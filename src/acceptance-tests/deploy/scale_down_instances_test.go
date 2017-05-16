@@ -14,7 +14,7 @@ import (
 
 var _ = Describe("Scaling down instances", func() {
 	var (
-		manifest  consul.Manifest
+		manifest  consul.ManifestV2
 		kv        consulclient.HTTPKV
 		testKey   string
 		testValue string
@@ -36,11 +36,11 @@ var _ = Describe("Scaling down instances", func() {
 			testKey = "consul-key-" + guid
 			testValue = "consul-value-" + guid
 
-			manifest, kv, err = helpers.DeployConsulWithInstanceCount(3, boshClient, config)
+			manifest, kv, err = helpers.DeployConsulWithInstanceCount("scale-down-3-to-1", 3, boshClient, config)
 			Expect(err).NotTo(HaveOccurred())
 
 			Eventually(func() ([]bosh.VM, error) {
-				return boshClient.DeploymentVMs(manifest.Name)
+				return helpers.DeploymentVMs(boshClient, manifest.Name)
 			}, "1m", "10s").Should(ConsistOf(helpers.GetVMsFromManifest(manifest)))
 		})
 
@@ -52,11 +52,8 @@ var _ = Describe("Scaling down instances", func() {
 
 			By("scaling from 3 nodes to 1", func() {
 				var err error
-				manifest.Jobs[0], manifest.Properties, err = consul.SetJobInstanceCount(manifest.Jobs[0], manifest.Networks[0], manifest.Properties, 1)
+				manifest, err = manifest.SetConsulJobInstanceCount(1)
 				Expect(err).NotTo(HaveOccurred())
-
-				members := manifest.ConsulMembers()
-				Expect(members).To(HaveLen(4))
 
 				yaml, err := manifest.ToYAML()
 				Expect(err).NotTo(HaveOccurred())
@@ -65,7 +62,7 @@ var _ = Describe("Scaling down instances", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				Eventually(func() ([]bosh.VM, error) {
-					return boshClient.DeploymentVMs(manifest.Name)
+					return helpers.DeploymentVMs(boshClient, manifest.Name)
 				}, "1m", "10s").Should(ConsistOf(helpers.GetVMsFromManifest(manifest)))
 			})
 
@@ -84,11 +81,11 @@ var _ = Describe("Scaling down instances", func() {
 			testKey = "consul-key-" + guid
 			testValue = "consul-value-" + guid
 
-			manifest, kv, err = helpers.DeployConsulWithInstanceCount(5, boshClient, config)
+			manifest, kv, err = helpers.DeployConsulWithInstanceCount("scale-down-5-to-3", 5, boshClient, config)
 			Expect(err).NotTo(HaveOccurred())
 
 			Eventually(func() ([]bosh.VM, error) {
-				return boshClient.DeploymentVMs(manifest.Name)
+				return helpers.DeploymentVMs(boshClient, manifest.Name)
 			}, "1m", "10s").Should(ConsistOf(helpers.GetVMsFromManifest(manifest)))
 
 			spammer = helpers.NewSpammer(kv, 1*time.Second, "test-consumer-0")
@@ -102,11 +99,8 @@ var _ = Describe("Scaling down instances", func() {
 
 			By("scaling from 5 nodes to 3", func() {
 				var err error
-				manifest.Jobs[0], manifest.Properties, err = consul.SetJobInstanceCount(manifest.Jobs[0], manifest.Networks[0], manifest.Properties, 3)
+				manifest, err = manifest.SetConsulJobInstanceCount(3)
 				Expect(err).NotTo(HaveOccurred())
-
-				members := manifest.ConsulMembers()
-				Expect(members).To(HaveLen(6))
 
 				yaml, err := manifest.ToYAML()
 				Expect(err).NotTo(HaveOccurred())
@@ -117,7 +111,7 @@ var _ = Describe("Scaling down instances", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				Eventually(func() ([]bosh.VM, error) {
-					return boshClient.DeploymentVMs(manifest.Name)
+					return helpers.DeploymentVMs(boshClient, manifest.Name)
 				}, "1m", "10s").Should(ConsistOf(helpers.GetVMsFromManifest(manifest)))
 
 				spammer.Stop()

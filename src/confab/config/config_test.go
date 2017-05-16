@@ -1,6 +1,8 @@
 package config_test
 
 import (
+	"path/filepath"
+
 	"github.com/cloudfoundry-incubator/consul-release/src/confab/config"
 
 	. "github.com/onsi/ginkgo"
@@ -15,7 +17,8 @@ var _ = Describe("Config", func() {
 					"node": {
 						"name": "nodename",
 						"index": 1234,
-						"external_ip": "10.0.0.1"
+						"external_ip": "10.0.0.1",
+						"zone": "z1"
 					},
 					"path": {
 						"agent_path": "/path/to/agent",
@@ -28,7 +31,7 @@ var _ = Describe("Config", func() {
 						"agent": {
 							"services": {
 								"myservice": {
-									"name" : "myservicename"	
+									"name" : "myservicename"
 								}
 							},
 							"mode": "server",
@@ -41,8 +44,10 @@ var _ = Describe("Config", func() {
 							},
 							"dns_config": {
 								"allow_stale": true,
-								"max_stale": "15s"
-							}
+								"max_stale": "15s",
+								"recursor_timeout": "15s"
+							},
+							"require_ssl": true
 						},
 						"encrypt_keys": ["key-1", "key-2"]
 					},
@@ -65,6 +70,7 @@ var _ = Describe("Config", func() {
 						Name:       "nodename",
 						Index:      1234,
 						ExternalIP: "10.0.0.1",
+						Zone:       "z1",
 					},
 					Consul: config.ConfigConsul{
 						Agent: config.ConfigConsulAgent{
@@ -82,9 +88,11 @@ var _ = Describe("Config", func() {
 								WAN: []string{"wan-server1", "wan-server2", "wan-server3"},
 							},
 							DnsConfig: config.ConfigConsulAgentDnsConfig{
-								AllowStale: true,
-								MaxStale:   "15s",
+								AllowStale:      true,
+								MaxStale:        "15s",
+								RecursorTimeout: "15s",
 							},
+							RequireSSL: true,
 						},
 						EncryptKeys: []string{"key-1", "key-2"},
 					},
@@ -99,6 +107,12 @@ var _ = Describe("Config", func() {
 			It("returns a config with default values", func() {
 				json := []byte(`{}`)
 				cfg, err := config.ConfigFromJSON(json)
+
+				cfg.Path.AgentPath = filepath.ToSlash(cfg.Path.AgentPath)
+				cfg.Path.ConsulConfigDir = filepath.ToSlash(cfg.Path.ConsulConfigDir)
+				cfg.Path.PIDFile = filepath.ToSlash(cfg.Path.PIDFile)
+				cfg.Path.KeyringFile = filepath.ToSlash(cfg.Path.KeyringFile)
+				cfg.Path.DataDir = filepath.ToSlash(cfg.Path.DataDir)
 
 				Expect(err).NotTo(HaveOccurred())
 				Expect(cfg).To(Equal(config.Config{
@@ -116,8 +130,9 @@ var _ = Describe("Config", func() {
 								WAN: []string{},
 							},
 							DnsConfig: config.ConfigConsulAgentDnsConfig{
-								AllowStale: false,
-								MaxStale:   "5s",
+								AllowStale:      true,
+								MaxStale:        "30s",
+								RecursorTimeout: "5s",
 							},
 						},
 					},
@@ -134,8 +149,8 @@ var _ = Describe("Config", func() {
 				cfg, err := config.ConfigFromJSON(json)
 
 				Expect(err).NotTo(HaveOccurred())
-				Expect(cfg.Path.KeyringFile).To(Equal("/var/vcap/store/consul_agent/serf/local.keyring"))
-				Expect(cfg.Path.DataDir).To(Equal("/var/vcap/store/consul_agent"))
+				Expect(filepath.ToSlash(cfg.Path.KeyringFile)).To(Equal("/var/vcap/store/consul_agent/serf/local.keyring"))
+				Expect(filepath.ToSlash(cfg.Path.DataDir)).To(Equal("/var/vcap/store/consul_agent"))
 			})
 		})
 

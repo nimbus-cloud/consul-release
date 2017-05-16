@@ -6,7 +6,7 @@ templates:
 packages:
  - acceptance-tests
  - consul
- - golang1.6
+ - golang1.7
 
 properties:
   consul.acceptance_tests.bosh.target:
@@ -25,8 +25,20 @@ properties:
    description: "BOSH Director CA Cert"
    default: ""
 
+  consul.acceptance_tests.bosh.errand.default_persistent_disk_type:
+   description: "Default persistent disk type used by consul servers"
+   default: "1GB"
+
+  consul.acceptance_tests.bosh.errand.default_vm_type:
+   description: "Default vm type for all VMs"
+   default: "m3.medium"
+
   consul.acceptance_tests.aws.subnets:
    description: "Subnet ID for AWS deployments"
+   default: ""
+
+  consul.acceptance_tests.aws.cloud_config_subnets:
+   description: "Subnet ID for AWS deployments utilizing the Cloud Config"
    default: ""
 
   consul.acceptance_tests.aws.access_key_id:
@@ -47,7 +59,7 @@ properties:
 
   consul.acceptance_tests.aws.region:
    description: "Region for AWS deployments"
-   default: "us-east-1"
+   default: "us-west-2"
 
   consul.acceptance_tests.registry.host:
    description: "Host for the BOSH registry"
@@ -72,3 +84,15 @@ properties:
   consul.acceptance_tests.consul_release_version:
    description: "The default consul-release version number to deploy"
    default: latest
+
+  consul.acceptance_tests.latest_consul_release_version:
+   description: "The latest bosh.io consul-release version number to deploy"
+   default: latest
+
+  consul.acceptance_tests.enable_turbulence_tests:
+   description: "Run tests in turbulence package"
+   default: false
+
+  consul.acceptance_tests.windows_clients:
+   description: "Run consats with windows clients"
+   default: false

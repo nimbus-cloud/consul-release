@@ -1,6 +1,7 @@
 package deploy_test
 
 import (
+	"os"
 	"time"
 
 	"github.com/cloudfoundry-incubator/consul-release/src/acceptance-tests/testing/consulclient"
@@ -12,9 +13,9 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("Multiple instance rolling upgrade", func() {
+var _ = PDescribe("Multiple instance rolling upgrade", func() {
 	var (
-		manifest consul.Manifest
+		manifest consul.ManifestV2
 		kv       consulclient.HTTPKV
 		spammer  *helpers.Spammer
 
@@ -39,14 +40,14 @@ var _ = Describe("Multiple instance rolling upgrade", func() {
 
 	It("persists data throughout the rolling upgrade", func() {
 		By("deploying the previous version of consul-release", func() {
-			releaseNumber, err := helpers.DownloadLatestConsulRelease(boshClient)
-			Expect(err).NotTo(HaveOccurred())
+			releaseNumber := os.Getenv("LATEST_CONSUL_RELEASE_VERSION")
 
-			manifest, kv, err = helpers.DeployConsulWithInstanceCountAndReleaseVersion(3, boshClient, config, releaseNumber)
+			var err error
+			manifest, kv, err = helpers.DeployConsulWithInstanceCountAndReleaseVersion("multiple-instance-rolling-upgrade", 3, boshClient, config, releaseNumber)
 			Expect(err).NotTo(HaveOccurred())
 
 			Eventually(func() ([]bosh.VM, error) {
-				return boshClient.DeploymentVMs(manifest.Name)
+				return helpers.DeploymentVMs(boshClient, manifest.Name)
 			}, "1m", "10s").Should(ConsistOf(helpers.GetVMsFromManifest(manifest)))
 
 			spammer = helpers.NewSpammer(kv, 1*time.Second, "test-consumer-0")
@@ -73,7 +74,7 @@ var _ = Describe("Multiple instance rolling upgrade", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			Eventually(func() ([]bosh.VM, error) {
-				return boshClient.DeploymentVMs(manifest.Name)
+				return helpers.DeploymentVMs(boshClient, manifest.Name)
 			}, "1m", "10s").Should(ConsistOf(helpers.GetVMsFromManifest(manifest)))
 
 			err = helpers.VerifyDeploymentRelease(boshClient, manifest.Name, helpers.ConsulReleaseVersion())

@@ -41,8 +41,12 @@ var _ = Describe("configuration", func() {
 					},
 					"aws": {
 						"subnets": [
-						{"id":"some-awssubnet-1", "range": "10.0.1.0/24", "az":"some-az-1"},
-						{"id":"some-awssubnet-2", "range": "10.0.2.0/24", "az":"some-az-2"}
+						{"id":"some-awssubnet-1", "range": "10.0.1.0/24", "az":"some-az-1", "security_group":"some-security-group-1"},
+						{"id":"some-awssubnet-2", "range": "10.0.2.0/24", "az":"some-az-2", "security_group":"some-security-group-2"}
+						],
+						"cloud_config_subnets": [
+						{"id":"some-cloudconfig-awssubnet-1", "range": "10.0.3.0/24", "az":"some-az-1", "security_group":"some-security-group-1"},
+						{"id":"some-cloudconfig-awssubnet-2", "range": "10.0.4.0/24", "az":"some-az-2", "security_group":"some-security-group-2"}
 						],
 						"access_key_id": "some-access-key-id",
 						"secret_access_key": "some-secret-access-key",
@@ -56,7 +60,8 @@ var _ = Describe("configuration", func() {
 						"username": "some-registry-username",
 						"password": "some-registry-password"
 					},
-					"parallel_nodes": 4
+					"parallel_nodes": 4,
+					"windows_clients": true
 				}`)
 				Expect(err).NotTo(HaveOccurred())
 			})
@@ -78,8 +83,12 @@ var _ = Describe("configuration", func() {
 					},
 					AWS: helpers.ConfigAWS{
 						Subnets: []helpers.ConfigSubnet{
-							{ID: "some-awssubnet-1", Range: "10.0.1.0/24", AZ: "some-az-1"},
-							{ID: "some-awssubnet-2", Range: "10.0.2.0/24", AZ: "some-az-2"},
+							{ID: "some-awssubnet-1", Range: "10.0.1.0/24", AZ: "some-az-1", SecurityGroup: "some-security-group-1"},
+							{ID: "some-awssubnet-2", Range: "10.0.2.0/24", AZ: "some-az-2", SecurityGroup: "some-security-group-2"},
+						},
+						CloudConfigSubnets: []helpers.ConfigSubnet{
+							{ID: "some-cloudconfig-awssubnet-1", Range: "10.0.3.0/24", AZ: "some-az-1", SecurityGroup: "some-security-group-1"},
+							{ID: "some-cloudconfig-awssubnet-2", Range: "10.0.4.0/24", AZ: "some-az-2", SecurityGroup: "some-security-group-2"},
 						},
 						AccessKeyID:           "some-access-key-id",
 						SecretAccessKey:       "some-secret-access-key",
@@ -95,6 +104,7 @@ var _ = Describe("configuration", func() {
 					},
 					TurbulenceReleaseName: "turbulence",
 					ParallelNodes:         4,
+					WindowsClients:        true,
 				}))
 			})
 		})
@@ -226,7 +236,7 @@ var _ = Describe("configuration", func() {
 					},
 					AWS: helpers.ConfigAWS{
 						DefaultKeyName: "bosh",
-						Region:         "us-east-1",
+						Region:         "us-west-2",
 					},
 					TurbulenceReleaseName: "turbulence",
 					ParallelNodes:         1,
@@ -265,7 +275,7 @@ var _ = Describe("configuration", func() {
 					},
 					AWS: helpers.ConfigAWS{
 						DefaultKeyName: "bosh",
-						Region:         "us-east-1",
+						Region:         "us-west-2",
 					},
 					TurbulenceReleaseName: "turbulence",
 					ParallelNodes:         1,
@@ -293,7 +303,7 @@ var _ = Describe("configuration", func() {
 				Expect(err).NotTo(HaveOccurred())
 			})
 
-			It("uses the region 'us-east-1'", func() {
+			It("uses the region 'us-west-2'", func() {
 				config, err := helpers.LoadConfig(configFilePath)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(config).To(Equal(helpers.Config{
@@ -304,7 +314,7 @@ var _ = Describe("configuration", func() {
 					},
 					AWS: helpers.ConfigAWS{
 						DefaultKeyName: "bosh",
-						Region:         "us-east-1",
+						Region:         "us-west-2",
 					},
 					TurbulenceReleaseName: "turbulence",
 					ParallelNodes:         1,
@@ -343,7 +353,7 @@ var _ = Describe("configuration", func() {
 					},
 					AWS: helpers.ConfigAWS{
 						DefaultKeyName: "bosh",
-						Region:         "us-east-1",
+						Region:         "us-west-2",
 					},
 					TurbulenceReleaseName: "turbulence",
 					ParallelNodes:         1,

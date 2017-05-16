@@ -14,17 +14,21 @@ type Config struct {
 	Registry              ConfigRegistry `json:"registry"`
 	ParallelNodes         int            `json:"parallel_nodes"`
 	TurbulenceReleaseName string
+	TurbulenceHost        string
+	WindowsClients        bool `json:"windows_clients"`
 }
 
 type ConfigBOSH struct {
-	Target         string `json:"target"`
-	Username       string `json:"username"`
-	Password       string `json:"password"`
-	DirectorCACert string `json:"director_ca_cert"`
+	Target         string       `json:"target"`
+	Username       string       `json:"username"`
+	Password       string       `json:"password"`
+	DirectorCACert string       `json:"director_ca_cert"`
+	Errand         ConfigErrand `json:"errand"`
 }
 
 type ConfigAWS struct {
 	Subnets               []ConfigSubnet `json:"subnets"`
+	CloudConfigSubnets    []ConfigSubnet `json:"cloud_config_subnets"`
 	AccessKeyID           string         `json:"access_key_id"`
 	SecretAccessKey       string         `json:"secret_access_key"`
 	DefaultKeyName        string         `json:"default_key_name"`
@@ -32,10 +36,16 @@ type ConfigAWS struct {
 	Region                string         `json:"region"`
 }
 
+type ConfigErrand struct {
+	DefaultVMType             string `json:"default_vm_type"`
+	DefaultPersistentDiskType string `json:"default_persistent_disk_type"`
+}
+
 type ConfigSubnet struct {
-	ID    string `json:"id"`
-	Range string `json:"range"`
-	AZ    string `json:"az"`
+	ID            string `json:"id"`
+	Range         string `json:"range"`
+	AZ            string `json:"az"`
+	SecurityGroup string `json:"security_group"`
 }
 
 type ConfigRegistry struct {
@@ -77,7 +87,7 @@ func LoadConfig(configFilePath string) (Config, error) {
 	}
 
 	if config.AWS.Region == "" {
-		config.AWS.Region = "us-east-1"
+		config.AWS.Region = "us-west-2"
 	}
 
 	if config.ParallelNodes == 0 {

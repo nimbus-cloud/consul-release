@@ -3,8 +3,10 @@ name: consul_agent
 
 templates:
   agent_ctl.sh.erb: bin/agent_ctl
+  agent_ctl_wrapper.erb: bin/agent_ctl_wrapper
   join_ctl.sh.erb: bin/join_ctl
   pre-start.erb: bin/pre-start
+  drain: bin/drain
   confab.json.erb: confab.json
   ca.crt.erb: config/certs/ca.crt
   server.crt.erb: config/certs/server.crt
@@ -20,6 +22,10 @@ properties:
   consul.agent.mode:
     description: "Mode to run the agent in. (client or server)"
     default: client
+
+  consul.agent.ports.dns:
+      description: "DNS server port"
+      default: 53
 
   consul.agent.servers.lan:
     description: "LAN server addresses to join on start."
@@ -50,10 +56,14 @@ properties:
 
   consul.agent.dns_config.allow_stale:
     description: "Enables a stale query for DNS information. This allows any Consul server, rather than only the leader, to service the request."
-    default: false
+    default: true
 
   consul.agent.dns_config.max_stale:
     description: "When allow_stale is specified, this is used to limit how stale results are allowed to be."
+    default: "30s"
+
+  consul.agent.dns_config.recursor_timeout:
+    description: "Timeout used by Consul when recursively querying an upstream DNS server."
     default: "5s"
 
   consul.agent.domain:

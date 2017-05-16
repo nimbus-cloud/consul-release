@@ -14,7 +14,7 @@ import (
 
 var _ = Describe("Scaling up Instances", func() {
 	var (
-		manifest  consul.Manifest
+		manifest  consul.ManifestV2
 		kv        consulclient.HTTPKV
 		testKey   string
 		testValue string
@@ -36,11 +36,11 @@ var _ = Describe("Scaling up Instances", func() {
 			testKey = "consul-key-" + guid
 			testValue = "consul-value-" + guid
 
-			manifest, kv, err = helpers.DeployConsulWithInstanceCount(1, boshClient, config)
+			manifest, kv, err = helpers.DeployConsulWithInstanceCount("scale-up-1-to-3", 1, boshClient, config)
 			Expect(err).NotTo(HaveOccurred())
 
 			Eventually(func() ([]bosh.VM, error) {
-				return boshClient.DeploymentVMs(manifest.Name)
+				return helpers.DeploymentVMs(boshClient, manifest.Name)
 			}, "1m", "10s").Should(ConsistOf(helpers.GetVMsFromManifest(manifest)))
 		})
 
@@ -52,11 +52,8 @@ var _ = Describe("Scaling up Instances", func() {
 
 			By("scaling from 1 nodes to 3", func() {
 				var err error
-				manifest.Jobs[0], manifest.Properties, err = consul.SetJobInstanceCount(manifest.Jobs[0], manifest.Networks[0], manifest.Properties, 3)
+				manifest, err = manifest.SetConsulJobInstanceCount(3)
 				Expect(err).NotTo(HaveOccurred())
-
-				members := manifest.ConsulMembers()
-				Expect(members).To(HaveLen(6))
 
 				yaml, err := manifest.ToYAML()
 				Expect(err).NotTo(HaveOccurred())
@@ -65,11 +62,17 @@ var _ = Describe("Scaling up Instances", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				Eventually(func() ([]bosh.VM, error) {
-					return boshClient.DeploymentVMs(manifest.Name)
+					return helpers.DeploymentVMs(boshClient, manifest.Name)
 				}, "1m", "10s").Should(ConsistOf(helpers.GetVMsFromManifest(manifest)))
 			})
 
-			By("setting a persistent value to check the cluster is up after the scale up", func() {
+			By("checking if value was persisted", func() {
+				actualVal, err := kv.Get(testKey)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(actualVal).To(Equal(testValue))
+			})
+
+			By("setting a persistent value to check if the cluster is up", func() {
 				err := kv.Set(testKey, testValue)
 				Expect(err).NotTo(HaveOccurred())
 			})
@@ -84,11 +87,11 @@ var _ = Describe("Scaling up Instances", func() {
 			testKey = "consul-key-" + guid
 			testValue = "consul-value-" + guid
 
-			manifest, kv, err = helpers.DeployConsulWithInstanceCount(3, boshClient, config)
+			manifest, kv, err = helpers.DeployConsulWithInstanceCount("scale-up-3-to-5", 3, boshClient, config)
 			Expect(err).NotTo(HaveOccurred())
 
 			Eventually(func() ([]bosh.VM, error) {
-				return boshClient.DeploymentVMs(manifest.Name)
+				return helpers.DeploymentVMs(boshClient, manifest.Name)
 			}, "1m", "10s").Should(ConsistOf(helpers.GetVMsFromManifest(manifest)))
 
 			spammer = helpers.NewSpammer(kv, 1*time.Second, "test-consumer-0")
@@ -102,11 +105,8 @@ var _ = Describe("Scaling up Instances", func() {
 
 			By("scaling from 3 nodes to 5", func() {
 				var err error
-				manifest.Jobs[0], manifest.Properties, err = consul.SetJobInstanceCount(manifest.Jobs[0], manifest.Networks[0], manifest.Properties, 5)
+				manifest, err = manifest.SetConsulJobInstanceCount(5)
 				Expect(err).NotTo(HaveOccurred())
-
-				members := manifest.ConsulMembers()
-				Expect(members).To(HaveLen(8))
 
 				yaml, err := manifest.ToYAML()
 				Expect(err).NotTo(HaveOccurred())
@@ -116,7 +116,7 @@ var _ = Describe("Scaling up Instances", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				Eventually(func() ([]bosh.VM, error) {
-					return boshClient.DeploymentVMs(manifest.Name)
+					return helpers.DeploymentVMs(boshClient, manifest.Name)
 				}, "1m", "10s").Should(ConsistOf(helpers.GetVMsFromManifest(manifest)))
 
 				spammer.Stop()

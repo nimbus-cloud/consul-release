@@ -5,23 +5,27 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"time"
 
 	"code.cloudfoundry.org/clock"
 	"code.cloudfoundry.org/lager"
 
-	"github.com/cloudfoundry-incubator/consul-release/src/confab"
 	"github.com/cloudfoundry-incubator/consul-release/src/confab/agent"
 	"github.com/cloudfoundry-incubator/consul-release/src/confab/chaperon"
 	"github.com/cloudfoundry-incubator/consul-release/src/confab/config"
+	"github.com/cloudfoundry-incubator/consul-release/src/confab/status"
+	"github.com/cloudfoundry-incubator/consul-release/src/confab/utils"
 	"github.com/hashicorp/consul/api"
+
 	consulagent "github.com/hashicorp/consul/command/agent"
 )
 
 type runner interface {
-	Start(config.Config, confab.Timeout) error
+	Start(config.Config, utils.Timeout) error
 	Stop() error
 }
 
@@ -40,6 +44,7 @@ func (ss *stringSlice) Set(value string) error {
 var (
 	recursors  stringSlice
 	configFile string
+	foreground bool
 
 	stdout = log.New(os.Stdout, "", 0)
 	stderr = log.New(os.Stderr, "", 0)
@@ -49,6 +54,7 @@ func main() {
 	flagSet := flag.NewFlagSet("flags", flag.ContinueOnError)
 	flagSet.Var(&recursors, "recursor", "specifies the address of an upstream DNS `server`, may be specified multiple times")
 	flagSet.StringVar(&configFile, "config-file", "", "specifies the config `file`")
+	flagSet.BoolVar(&foreground, "foreground", false, "if true confab will wait for consul to exit")
 
 	if len(os.Args) < 2 {
 		printUsageAndExit("invalid number of arguments", flagSet)
@@ -92,7 +98,27 @@ func main() {
 		Logger:    logger,
 	}
 
-	consulAPIClient, err := api.NewClient(api.DefaultConfig())
+	clientConfig := api.DefaultConfig()
+	if cfg.Consul.Agent.RequireSSL {
+		clientConfig.Scheme = "https"
+		certsDir := filepath.Join(cfg.Path.ConsulConfigDir, "certs")
+		tlsConfig := api.TLSConfig{
+			Address:  clientConfig.Address,
+			CAFile:   filepath.Join(certsDir, "ca.crt"),
+			CertFile: filepath.Join(certsDir, "agent.crt"),
+			KeyFile:  filepath.Join(certsDir, "agent.key"),
+		}
+		tlsClientConfig, err := api.SetupTLSConfig(&tlsConfig)
+		if err != nil {
+			stderr.Printf("error setting up TLS config: %s", err)
+			os.Exit(1)
+		}
+		if transport, ok := clientConfig.HttpClient.Transport.(*http.Transport); ok {
+			transport.TLSClientConfig = tlsClientConfig
+		}
+	}
+
+	consulAPIClient, err := api.NewClient(clientConfig)
 	if err != nil {
 		panic(err) // not tested, NewClient never errors
 	}
@@ -104,11 +130,12 @@ func main() {
 		Logger:          logger,
 	}
 
+	retrier := utils.NewRetrier(clock.NewClock(), 1*time.Second)
+
 	controller := chaperon.Controller{
 		AgentRunner:    agentRunner,
 		AgentClient:    agentClient,
-		SyncRetryDelay: 1 * time.Second,
-		SyncRetryClock: clock.NewClock(),
+		Retrier:        retrier,
 		EncryptKeys:    cfg.Consul.EncryptKeys,
 		Logger:         logger,
 		ServiceDefiner: config.ServiceDefiner{logger},
@@ -121,7 +148,8 @@ func main() {
 
 	var r runner = chaperon.NewClient(controller, consulagent.NewRPCClient, keyringRemover, configWriter)
 	if controller.Config.Consul.Agent.Mode == "server" {
-		r = chaperon.NewServer(controller, configWriter, consulagent.NewRPCClient)
+		bootstrapChecker := chaperon.NewBootstrapChecker(logger, agentClient, status.Client{ConsulAPIStatus: consulAPIClient.Status()}, time.Sleep)
+		r = chaperon.NewServer(controller, configWriter, consulagent.NewRPCClient, bootstrapChecker)
 	}
 
 	switch os.Args[1] {
@@ -132,7 +160,7 @@ func main() {
 				controller.Config.Path.ConsulConfigDir), flagSet)
 		}
 
-		if chaperon.IsRunningProcess(agentRunner.PIDFile) {
+		if utils.IsRunningProcess(agentRunner.PIDFile) {
 			stderr.Println("consul_agent is already running, please stop it first")
 			os.Exit(1)
 		}
@@ -140,12 +168,20 @@ func main() {
 		if len(agentClient.ExpectedMembers) == 0 {
 			printUsageAndExit("at least one \"expected-member\" must be provided", flagSet)
 		}
-		timeout := confab.NewTimeout(time.After(time.Duration(controller.Config.Confab.TimeoutInSeconds) * time.Second))
+
+		timeout := utils.NewTimeout(time.After(time.Duration(controller.Config.Confab.TimeoutInSeconds) * time.Second))
 
 		if err := r.Start(cfg, timeout); err != nil {
 			stderr.Printf("error during start: %s", err)
 			r.Stop()
 			os.Exit(1)
+		}
+		if foreground {
+			if err := agentRunner.Wait(); err != nil {
+				stderr.Printf("error during wait: %s", err)
+				r.Stop()
+				os.Exit(1)
+			}
 		}
 	case "stop":
 		if err := r.Stop(); err != nil {

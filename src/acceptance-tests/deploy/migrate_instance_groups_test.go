@@ -18,7 +18,7 @@ import (
 const (
 	OPERATION_TIMEOUT_ERROR_COUNT_THRESHOLD = 1
 	RESET_ERROR_COUNT_THRESHOLD             = 3
-	IO_TIMEOUT_ERROR_COUNT_THRESHOLD        = 5
+	IO_TIMEOUT_ERROR_COUNT_THRESHOLD        = 25
 	NO_ROUTE_ERROR_COUNT_THRESHOLD          = 10
 )
 
@@ -38,14 +38,18 @@ var _ = Describe("Migrate instance groups", func() {
 
 	Describe("when migrating two instance groups from different AZs to a multi-AZ single instance group", func() {
 		It("deploys successfully with minimal interruption", func() {
+			if config.WindowsClients {
+				Skip("bosh 1.0 style manifests do not support windows vms")
+			}
+
 			By("deploying 3 node cluster across two AZs with BOSH 1.0 manifest", func() {
 				var err error
-				manifest, err = helpers.DeployMultiAZConsul(boshClient, config)
+				manifest, err = helpers.DeployMultiAZConsul("migrate-instance-group", boshClient, config)
 				Expect(err).NotTo(HaveOccurred())
 
 				Eventually(func() ([]bosh.VM, error) {
-					return boshClient.DeploymentVMs(manifest.Name)
-				}, "1m", "10s").Should(ConsistOf(helpers.GetVMsFromManifest(manifest)))
+					return helpers.DeploymentVMs(boshClient, manifest.Name)
+				}, "1m", "10s").Should(ConsistOf(helpers.GetVMsFromManifestV1(manifest)))
 
 				for i, ip := range manifest.Jobs[2].Networks[0].StaticIPs {
 					kv = consulclient.NewHTTPKV(fmt.Sprintf("http://%s:6769", ip))
@@ -60,15 +64,12 @@ var _ = Describe("Migrate instance groups", func() {
 			})
 
 			By("deploying 3 node cluster across two AZs with BOSH 2.0 manifest", func() {
-				err := helpers.UpdateCloudConfig(boshClient, config)
-				Expect(err).NotTo(HaveOccurred())
-
 				manifestv2, err := helpers.DeployMultiAZConsulMigration(boshClient, config, manifest.Name)
 				Expect(err).NotTo(HaveOccurred())
 
 				Eventually(func() ([]bosh.VM, error) {
-					return boshClient.DeploymentVMs(manifestv2.Name)
-				}, "1m", "10s").Should(ConsistOf(helpers.GetVMsFromManifestV2(manifestv2)))
+					return helpers.DeploymentVMs(boshClient, manifestv2.Name)
+				}, "1m", "10s").Should(ConsistOf(helpers.GetVMsFromManifest(manifestv2)))
 			})
 
 			By("verifying keys are accounted for in cluster", func() {
